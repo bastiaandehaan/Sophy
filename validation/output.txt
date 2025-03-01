@@ -1,0 +1,22 @@
+
+==================================================
+RISICOBEHEER VALIDATIE: XAUUSD
+==================================================
+
+
+Risicobeheer Statistieken:
+Initieel Account Balance: $100,649.62
+Eind Account Balance: $100,911.36
+Winst/Verlies: $261.74 (0.26%)
+
+Aantal trades: 11
+Gemiddelde positiegrootte: 0.20 lots
+Gemiddeld risicobedrag per trade: $1,003.49
+Gemiddelde trade duur: 33.3 dagen
+
+Winrate: 45.45%
+Gemiddelde winnende trade: $218.06
+Gemiddelde verliezende trade: $-79.47
+Profit Factor: 2.29
+
+Top 5 Meest Winstgevende Trades:
