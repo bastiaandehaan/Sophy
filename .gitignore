@@ -1,0 +1,14 @@
+# Ignore Python virtuele omgeving
+.venv/
+__pycache__/
+*.pyc
+
+# Ignore PyCharm-specifieke bestanden
+.idea/
+
+# Ignore log- en data-bestanden die lokaal gegenereerd worden (optioneel)
+logs/
+data/
+*.log
+*.csv
+*.png
