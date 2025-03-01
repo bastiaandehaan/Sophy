@@ -6,14 +6,12 @@ from datetime import datetime, timedelta
 import MetaTrader5 as mt5
 import matplotlib.pyplot as plt
 
-
 # Importeer modules
 from modules.mt5_connector import MT5Connector
 from modules.strategy import TurtleStrategy
 from modules.risk_manager import RiskManager
 from modules.backtester import Backtester
 from utils.logger import Logger
-
 
 def load_config(config_path):
     """Laad configuratie uit JSON bestand"""
@@ -26,7 +24,6 @@ def load_config(config_path):
     except json.JSONDecodeError:
         print(f"Ongeldige JSON in configuratiebestand: {config_path}")
         sys.exit(1)
-
 
 def main():
     """Hoofdfunctie van de tradingbot"""
@@ -47,11 +44,12 @@ def main():
     os.makedirs(log_dir, exist_ok=True)
     logger = Logger(os.path.join(log_dir, 'trading_journal.csv'))
 
-    # Initialiseer risicomanager
+    # Initialiseer risicomanager met de nieuwe leverage parameter
     risk_manager = RiskManager(
         max_risk_per_trade=config['mt5']['risk_per_trade'],
         max_daily_drawdown=0.05,  # 5% maximale dagelijkse drawdown
-        max_total_drawdown=0.1  # 10% maximale totale drawdown
+        max_total_drawdown=0.1,   # 10% maximale totale drawdown
+        leverage=config['mt5'].get('leverage', 1)  # Haal leverage uit config, standaard 1
     )
 
     # Initialiseer strategie
@@ -92,7 +90,6 @@ def main():
         connector.disconnect()
         print("Bot gestopt en verbinding gesloten.")
 
-
 def test_connection():
     """Test alleen de verbinding met MT5"""
     print("Test verbinding met MT5...")
@@ -123,7 +120,6 @@ def test_connection():
     # Verbreek verbinding
     connector.disconnect()
     print("Test afgerond.")
-
 
 def run_backtest():
     """Voer een backtest uit van de Turtle Trading strategie"""
@@ -178,7 +174,6 @@ def run_backtest():
     finally:
         connector.disconnect()
         print("Backtesting voltooid")
-
 
 if __name__ == "__main__":
     print("\n==== TurtleTrader Menu ====")

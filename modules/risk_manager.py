@@ -1,12 +1,11 @@
 from datetime import datetime, date
 
-
 class RiskManager:
     """Klasse voor risicobeheer"""
 
-    def __init__(self, max_risk_per_trade=0.01, max_daily_drawdown=0.05, max_total_drawdown=0.1):
+    def __init__(self, max_risk_per_trade=0.015, max_daily_drawdown=0.05, max_total_drawdown=0.1, leverage=10):
         """
-        Initialiseer de risicomanager
+        Initialiseer de risicomanager met hefboomoverweging
 
         Parameters:
         -----------
@@ -16,10 +15,13 @@ class RiskManager:
             Maximum dagelijkse drawdown (percentage van account)
         max_total_drawdown : float
             Maximum totale drawdown (percentage van account)
+        leverage : float
+            Hefboommultiplier (bijv. 10 voor 1:10 hefboom)
         """
         self.max_risk_per_trade = max_risk_per_trade
         self.max_daily_drawdown = max_daily_drawdown
         self.max_total_drawdown = max_total_drawdown
+        self.leverage = leverage
 
         # Bijhouden van dagelijkse verliezen
         self.daily_losses = 0
