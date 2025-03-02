@@ -6,16 +6,19 @@ import matplotlib.pyplot as plt
 import MetaTrader5 as mt5
 from datetime import datetime, timedelta
 
+
 # Voeg projectpad toe aan Python path
 script_dir = os.path.dirname(os.path.abspath(__file__))
-project_dir = os.path.abspath(os.path.join(script_dir, '..'))
+project_dir = script_dir
 sys.path.append(project_dir)
 
+# Importeer modules
 # Importeer modules
 from modules.mt5_connector import MT5Connector
 from modules.strategy import TurtleStrategy
 from modules.enhanced_strategy import EnhancedTurtleStrategy
-from modules.backtester import DirectBacktester
+from modules.direct_backtester import DirectBacktester
+
 
 
 def load_config(config_path):

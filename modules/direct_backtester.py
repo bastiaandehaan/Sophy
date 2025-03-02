@@ -6,14 +6,21 @@ import MetaTrader5 as mt5
 import os
 import sys
 
-# Voeg het projectpad toe aan sys.path om imports te laten werken
+# Projectpad toevoegen voor imports
 sys.path.append(os.path.abspath('..'))
 
-# Importeer de werkelijke TurtleTrader modules
+# Importeer TurtleTrader modules (toegevoegd TurtleStrategy import)
 from modules.strategy import TurtleStrategy
 from modules.risk_manager import RiskManager
 from utils.logger import Logger
 
+# Importeer TurtleTrader modules (duplicaat verwijderd, maar laten staan zoals origineel)
+from modules.strategy import TurtleStrategy
+from modules.risk_manager import RiskManager
+from utils.logger import Logger
+
+# Voeg het projectpad toe aan sys.path om imports te laten werken
+sys.path.append(os.path.abspath('..'))
 
 class DirectBacktester:
     """
@@ -95,6 +102,8 @@ class DirectBacktester:
             logger=logger,
             config=backtest_config
         )
+        # Added: Print strategy initialization
+        print(f"Strategy initialized: {strategy.__class__.__name__}")
 
         # Resultaat tracking
         account_balance = initial_balance
@@ -105,6 +114,14 @@ class DirectBacktester:
 
         # Loop door elke tijdstap in de historische data
         for i in range(len(self.data)):
+            # Check if we have enough data for the indicators
+            if i < 50:  # Need at least 50 bars for all indicators
+                continue  # Skip this time step and move to the next
+
+            # Added: Print every 100th candle
+            if i % 100 == 0:  # Print every 100th candle to avoid too much output
+                print(f"Processing time step {i}: {current_data['time'].iloc[-1]}")
+
             # Huidige tijdstap data
             current_data = self.data.iloc[:i + 1].copy()
             current_time = current_data['time'].iloc[-1]
@@ -378,15 +395,6 @@ class DirectBacktester:
     def plot_results(self, results_df, trades_df, trade_stats):
         """
         Plot backtest resultaten
-
-        Parameters:
-        -----------
-        results_df : pandas.DataFrame
-            DataFrame met equity curve
-        trades_df : pandas.DataFrame
-            DataFrame met trades
-        trade_stats : dict
-            Handelsstatistieken
         """
         plt.figure(figsize=(14, 10))
 

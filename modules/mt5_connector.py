@@ -147,6 +147,52 @@ class MT5Connector:
         int
             Order ticket nummer of None bij fout
         """
+
+        def modify_stop_loss(self, symbol, ticket, new_stop):
+            """
+            Wijzig de stop loss van een bestaande positie
+
+            Parameters:
+            -----------
+            symbol : str
+                Het handelssymbool
+            ticket : int
+                Ticket nummer van de positie
+            new_stop : float
+                Nieuwe stop loss prijs
+
+            Returns:
+            --------
+            bool
+                True indien succesvol, anders False
+            """
+            # Controleer verbinding
+            if not self.connected:
+                print("Niet verbonden met MT5")
+                return False
+
+            # Pas symbool mapping toe indien nodig
+            mapped_symbol = symbol
+            if 'symbol_mapping' in self.config and symbol in self.config['symbol_mapping']:
+                mapped_symbol = self.config['symbol_mapping'][symbol]
+
+            # Creëer request
+            request = {
+                "action": mt5.TRADE_ACTION_SLTP,
+                "symbol": mapped_symbol,
+                "sl": new_stop,
+                "position": ticket
+            }
+
+            # Stuur request naar MT5
+            result = mt5.order_send(request)
+
+            if result.retcode != mt5.TRADE_RETCODE_DONE:
+                print(f"Wijzigen stop loss mislukt: {result.retcode}, {result.comment}")
+                return False
+
+            print(f"Stop loss succesvol gewijzigd - ticket: {ticket}, nieuwe SL: {new_stop}")
+            return True
         # Controleer verbinding
         if not self.connected:
             print("Niet verbonden met MT5")
@@ -271,3 +317,49 @@ class MT5Connector:
             mapped_symbol = self.config['symbol_mapping'][symbol]
 
         return mt5.symbol_info_tick(mapped_symbol)
+
+    def modify_stop_loss(self, symbol, ticket, new_stop):
+        """
+        Wijzig de stop loss van een bestaande positie
+
+        Parameters:
+        -----------
+        symbol : str
+            Het handelssymbool
+        ticket : int
+            Ticket nummer van de positie
+        new_stop : float
+            Nieuwe stop loss prijs
+
+        Returns:
+        --------
+        bool
+            True indien succesvol, anders False
+        """
+        # Controleer verbinding
+        if not self.connected:
+            print("Niet verbonden met MT5")
+            return False
+
+        # Pas symbool mapping toe indien nodig
+        mapped_symbol = symbol
+        if 'symbol_mapping' in self.config and symbol in self.config['symbol_mapping']:
+            mapped_symbol = self.config['symbol_mapping'][symbol]
+
+        # Creëer request
+        request = {
+            "action": mt5.TRADE_ACTION_SLTP,
+            "symbol": mapped_symbol,
+            "sl": new_stop,
+            "position": ticket
+        }
+
+        # Stuur request naar MT5
+        result = mt5.order_send(request)
+
+        if result.retcode != mt5.TRADE_RETCODE_DONE:
+            print(f"Wijzigen stop loss mislukt: {result.retcode}, {result.comment}")
+            return False
+
+        print(f"Stop loss succesvol gewijzigd - ticket: {ticket}, nieuwe SL: {new_stop}")
+        return True

@@ -441,3 +441,4 @@ class EnhancedTurtleStrategy:
             if positions:
                 result[symbol] = positions
         return result
+
