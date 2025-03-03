@@ -19,6 +19,34 @@ class MT5Connector:
         self.config = mt5_config
         self.connected = False
 
+    def get_timeframe_constant(self, timeframe_str):
+        """
+        Converteer een timeframe string naar de juiste MT5 constante
+
+        Parameters:
+        -----------
+        timeframe_str : str
+            Timeframe als string (bijv. "M1", "H4", "D1")
+
+        Returns:
+        --------
+        int
+            MT5 timeframe constante
+        """
+        timeframe_map = {
+            "M1": mt5.TIMEFRAME_M1,
+            "M5": mt5.TIMEFRAME_M5,
+            "M15": mt5.TIMEFRAME_M15,
+            "M30": mt5.TIMEFRAME_M30,
+            "H1": mt5.TIMEFRAME_H1,
+            "H4": mt5.TIMEFRAME_H4,
+            "D1": mt5.TIMEFRAME_D1,
+            "W1": mt5.TIMEFRAME_W1,
+            "MN1": mt5.TIMEFRAME_MN1,
+        }
+
+        return timeframe_map.get(timeframe_str, mt5.TIMEFRAME_D1)  # Default naar D1 als niet gevonden
+
     def connect(self):
         """Verbinding maken met MT5"""
         if not mt5.initialize(
@@ -82,7 +110,7 @@ class MT5Connector:
             return False
         return True
 
-    def get_historical_data(self, symbol, timeframe, bars_count):
+    def get_historical_data(self, symbol, timeframe=None, bars_count=100):
         """
         Haal historische prijsdata op
 
@@ -90,8 +118,8 @@ class MT5Connector:
         -----------
         symbol : str
             Het handelssymbool
-        timeframe : int
-            MT5 timeframe constante (bijv. mt5.TIMEFRAME_D1)
+        timeframe : int, optional
+            MT5 timeframe constante (bijv. mt5.TIMEFRAME_D1), indien None wordt uit config gehaald
         bars_count : int
             Aantal candles om op te halen
 
@@ -104,6 +132,11 @@ class MT5Connector:
         if not self.connected:
             print("Niet verbonden met MT5")
             return None
+
+        # Gebruik timeframe uit configuratie indien niet meegegeven
+        if timeframe is None:
+            timeframe_str = self.config.get('timeframe', 'D1')
+            timeframe = self.get_timeframe_constant(timeframe_str)
 
         # Pas symbool mapping toe
         mapped_symbol = symbol
@@ -147,52 +180,6 @@ class MT5Connector:
         int
             Order ticket nummer of None bij fout
         """
-
-        def modify_stop_loss(self, symbol, ticket, new_stop):
-            """
-            Wijzig de stop loss van een bestaande positie
-
-            Parameters:
-            -----------
-            symbol : str
-                Het handelssymbool
-            ticket : int
-                Ticket nummer van de positie
-            new_stop : float
-                Nieuwe stop loss prijs
-
-            Returns:
-            --------
-            bool
-                True indien succesvol, anders False
-            """
-            # Controleer verbinding
-            if not self.connected:
-                print("Niet verbonden met MT5")
-                return False
-
-            # Pas symbool mapping toe indien nodig
-            mapped_symbol = symbol
-            if 'symbol_mapping' in self.config and symbol in self.config['symbol_mapping']:
-                mapped_symbol = self.config['symbol_mapping'][symbol]
-
-            # Creëer request
-            request = {
-                "action": mt5.TRADE_ACTION_SLTP,
-                "symbol": mapped_symbol,
-                "sl": new_stop,
-                "position": ticket
-            }
-
-            # Stuur request naar MT5
-            result = mt5.order_send(request)
-
-            if result.retcode != mt5.TRADE_RETCODE_DONE:
-                print(f"Wijzigen stop loss mislukt: {result.retcode}, {result.comment}")
-                return False
-
-            print(f"Stop loss succesvol gewijzigd - ticket: {ticket}, nieuwe SL: {new_stop}")
-            return True
         # Controleer verbinding
         if not self.connected:
             print("Niet verbonden met MT5")
@@ -289,7 +276,8 @@ class MT5Connector:
             'equity': account.equity,
             'margin': account.margin,
             'free_margin': account.margin_free,
-            'profit': account.profit
+            'profit': account.profit,
+            'leverage': account.leverage
         }
 
     def get_symbol_tick(self, symbol):
@@ -318,48 +306,23 @@ class MT5Connector:
 
         return mt5.symbol_info_tick(mapped_symbol)
 
-    def modify_stop_loss(self, symbol, ticket, new_stop):
+    def get_symbol_info(self, symbol):
         """
-        Wijzig de stop loss van een bestaande positie
+        Haal gedetailleerde symboolinformatie op
 
         Parameters:
         -----------
         symbol : str
             Het handelssymbool
-        ticket : int
-            Ticket nummer van de positie
-        new_stop : float
-            Nieuwe stop loss prijs
 
         Returns:
         --------
-        bool
-            True indien succesvol, anders False
+        symbol_info object of None
+            De symboolinformatie of None bij fout
         """
-        # Controleer verbinding
-        if not self.connected:
-            print("Niet verbonden met MT5")
-            return False
-
-        # Pas symbool mapping toe indien nodig
+        # Pas symbool mapping toe
         mapped_symbol = symbol
         if 'symbol_mapping' in self.config and symbol in self.config['symbol_mapping']:
             mapped_symbol = self.config['symbol_mapping'][symbol]
 
-        # Creëer request
-        request = {
-            "action": mt5.TRADE_ACTION_SLTP,
-            "symbol": mapped_symbol,
-            "sl": new_stop,
-            "position": ticket
-        }
-
-        # Stuur request naar MT5
-        result = mt5.order_send(request)
-
-        if result.retcode != mt5.TRADE_RETCODE_DONE:
-            print(f"Wijzigen stop loss mislukt: {result.retcode}, {result.comment}")
-            return False
-
-        print(f"Stop loss succesvol gewijzigd - ticket: {ticket}, nieuwe SL: {new_stop}")
-        return True
+        return mt5.symbol_info(mapped_symbol)

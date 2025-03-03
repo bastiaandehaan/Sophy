@@ -1,23 +1,26 @@
-# modules/backtester.py
 import pandas as pd
 import numpy as np
+import matplotlib
+
+matplotlib.use('TkAgg')  # Stel backend in op TkAgg voor een apart venster
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 import os
 import MetaTrader5 as mt5
+import itertools
 
 
 class Backtester:
-    """Backtesting module voor trading strategieën"""
+    """Backtesting module voor de Turtle Trading strategie"""
 
-    def __init__(self, connector, config, output_dir='test_results'):
+    def __init__(self, connector, config, output_dir='data/backtest_results'):
         """
         Initialiseer de backtester
 
         Parameters:
         -----------
         connector : MT5Connector
-            Verbinding met MetaTrader 5
+            Verbinding met MetaTrader 5 voor het ophalen van historische data
         config : dict
             Configuratie voor de backtester
         output_dir : str, optional
@@ -30,165 +33,18 @@ class Backtester:
         # Maak output map aan als deze niet bestaat
         os.makedirs(output_dir, exist_ok=True)
 
+        # Standaard parameters voor de Turtle strategie
+        self.default_params = {
+            'entry_period': 20,  # Breakout periode voor entry
+            'exit_period': 10,  # Breakout periode voor exit
+            'atr_period': 20,  # ATR berekeningsperiode
+            'atr_multiplier': 2,  # Vermenigvuldiger voor stop loss berekening
+            'risk_per_trade': 0.01,  # Risico per trade (1%)
+            'use_trend_filter': True  # Gebruik EMA trendfilter
+        }
+
         # Performance metrics
         self.metrics = {}
-
-    def run_backtest(self, symbol, strategy_class, start_date, end_date,
-                     risk_per_trade=0.01, timeframe=mt5.TIMEFRAME_H4):
-        """
-        Voer een backtest uit voor een symbool en strategie
-
-        Parameters:
-        -----------
-        symbol : str
-            Het handelssymbool
-        strategy_class : class
-            De strategie klasse om te testen
-        start_date : datetime
-            Start datum
-        end_date : datetime
-            Eind datum
-        risk_per_trade : float, optional
-            Risico per trade (percentage van account)
-        timeframe : int, optional
-            MT5 timeframe constante
-
-        Returns:
-        --------
-        tuple
-            (DataFrame met resultaten, Dictionary met statistieken)
-        """
-        print(f"\nBacktest starten voor {symbol} met {strategy_class.__name__}")
-        print(f"Periode: {start_date.strftime('%Y-%m-%d')} tot {end_date.strftime('%Y-%m-%d')}")
-
-        # Pas configuratie aan voor backtest
-        backtest_config = self.config.copy()
-        backtest_config['mt5']['risk_per_trade'] = risk_per_trade
-
-        # Haal historische data op
-        df = self.get_historical_data(symbol, timeframe, start_date, end_date)
-        if df.empty:
-            print(f"Geen historische data beschikbaar voor {symbol}")
-            return None, {}
-
-        print(f"Data geladen: {len(df)} candles")
-
-        # Creëer MockConnector en andere componenten voor de strategie
-        mock_connector = self._create_mock_connector(df)
-        mock_logger = self._create_mock_logger()
-        risk_manager = self._create_risk_manager(risk_per_trade)
-
-        # Initialiseer strategie
-        strategy = strategy_class(
-            connector=mock_connector,
-            risk_manager=risk_manager,
-            logger=mock_logger,
-            config=backtest_config
-        )
-
-        # Voorbereiden voor simulatie
-        account_balance = backtest_config['mt5'].get('account_balance', 100000)
-        equity_curve = []
-        trades = []
-
-        # Simuleer verwerking van elke candle
-        min_bars_needed = 50  # Minimaal aantal candles nodig voor indicatoren
-        for i in range(len(df)):
-            # Skip eerste candles totdat we genoeg data hebben voor alle indicatoren
-            if i < min_bars_needed:
-                continue
-
-            # Update huidige data
-            current_data = df.iloc[:i + 1].copy()
-            current_time = current_data['time'].iloc[-1]
-
-            # Update mock connector met huidige data
-            mock_connector.update_data(current_data, i)
-
-            # Verwerk symbool met strategie
-            try:
-                strategy.process_symbol(symbol)
-            except Exception as e:
-                print(f"Fout bij verwerken van {symbol} op {current_time}: {e}")
-                import traceback
-                traceback.print_exc()
-                continue
-
-            # Verwerk nieuwe trades
-            new_trades = mock_logger.get_trades()
-            for trade in new_trades:
-                if trade['action'] == 'BUY':
-                    # Nieuwe positie openen
-                    open_trade = {
-                        'entry_time': current_time,
-                        'entry_price': trade['price'],
-                        'volume': trade['volume'],
-                        'stop_loss': trade['sl'],
-                        'comment': trade['comment'],
-                        'position_id': len(trades) + 1
-                    }
-                    trades.append(open_trade)
-                    mock_connector.add_position(open_trade)
-                elif trade['action'] == 'SELL':
-                    # Zoek bijbehorende open positie
-                    position = mock_connector.get_position_by_id(trade['position_id'])
-                    if position:
-                        # Bereken P&L
-                        entry_price = position['entry_price']
-                        exit_price = trade['price']
-                        volume = position['volume']
-
-                        pnl = self._calculate_pnl(symbol, entry_price, exit_price, volume)
-
-                        # Update account balance
-                        account_balance += pnl
-
-                        # Update trade record
-                        position['exit_time'] = current_time
-                        position['exit_price'] = exit_price
-                        position['pnl'] = pnl
-
-                        # Verwijder positie
-                        mock_connector.close_position(position['position_id'])
-
-            # Update equity curve
-            equity = account_balance
-            for pos in mock_connector.get_open_positions():
-                # Bereken unrealized P&L
-                current_price = current_data['close'].iloc[-1]
-                unrealized_pnl = self._calculate_pnl(
-                    symbol, pos['entry_price'], current_price, pos['volume']
-                )
-                equity += unrealized_pnl
-
-            equity_curve.append({
-                'time': current_time,
-                'balance': account_balance,
-                'equity': equity,
-                'open_positions': len(mock_connector.get_open_positions())
-            })
-
-        # Sluit eventuele open posities aan het einde
-        final_price = df['close'].iloc[-1]
-        for pos in mock_connector.get_open_positions():
-            pnl = self._calculate_pnl(symbol, pos['entry_price'], final_price, pos['volume'])
-            account_balance += pnl
-
-            pos['exit_time'] = df['time'].iloc[-1]
-            pos['exit_price'] = final_price
-            pos['pnl'] = pnl
-
-        # Maak resultaat DataFrames
-        results_df = pd.DataFrame(equity_curve)
-        trades_df = pd.DataFrame([t for t in trades if 'exit_price' in t])
-
-        # Bereken statistieken
-        stats = self._calculate_statistics(trades_df, backtest_config['mt5']['account_balance'])
-
-        # Sla resultaten op
-        self.metrics[symbol] = stats
-
-        return results_df, trades_df, stats
 
     def get_historical_data(self, symbol, timeframe, start_date, end_date):
         """
@@ -199,7 +55,7 @@ class Backtester:
         symbol : str
             Het handelssymbool
         timeframe : int
-            MT5 timeframe constante
+            MT5 timeframe constante (bijv. mt5.TIMEFRAME_D1)
         start_date : datetime
             Start datum
         end_date : datetime
@@ -210,9 +66,9 @@ class Backtester:
         pandas.DataFrame
             DataFrame met historische data
         """
-        # Converteer datums naar timestamps (met 1 uur correctie voor FTMO tijdverschil)
-        start_timestamp = int((start_date - timedelta(hours=1)).timestamp())
-        end_timestamp = int((end_date - timedelta(hours=1)).timestamp())
+        # Converteer datums naar timestamps
+        start_timestamp = int(start_date.timestamp())
+        end_timestamp = int(end_date.timestamp())
 
         # Haal data op via de connector (gebruik mapped_symbol indien nodig)
         mapped_symbol = symbol
@@ -222,7 +78,7 @@ class Backtester:
         # Haal data op van MT5
         rates = mt5.copy_rates_range(mapped_symbol, timeframe, start_timestamp, end_timestamp)
         if rates is None or len(rates) == 0:
-            print(f"Geen historische data beschikbaar voor {mapped_symbol}")
+            print(f"Geen historische data beschikbaar voor {mapped_symbol} tussen {start_date} en {end_date}")
             return pd.DataFrame()
 
         # Converteer naar DataFrame
@@ -231,277 +87,400 @@ class Backtester:
 
         return df
 
-    def _calculate_pnl(self, symbol, entry_price, exit_price, volume):
-        """Bereken winst/verlies van een positie"""
-        point_value = 0.1  # Standaard waarde
-
-        # Aanpassen per symbool type
-        if symbol == "EURUSD" or symbol == "GBPUSD" or "USD" in symbol and not symbol == "XAUUSD":
-            point_value = 0.0001  # Forex
-        elif symbol == "XAUUSD":
-            point_value = 0.1  # Goud
-        elif symbol == "US30":
-            point_value = 1.0  # US30 index
-
-        pip_value = 10  # Standaard pip waarde
-        pips = (exit_price - entry_price) / point_value
-
-        return pips * volume * pip_value
-
-    def _create_mock_connector(self, data):
-        """Creëer een mock connector voor backtesting"""
-
-        class MockConnector:
-            def __init__(self, data):
-                self.data = data
-                self.current_idx = 0
-                self.open_positions = []
-                self.next_position_id = 1
-
-            def update_data(self, data, idx):
-                self.data = data
-                self.current_idx = idx
-
-            def get_historical_data(self, symbol, timeframe, bars_count):
-                available_bars = min(bars_count, self.current_idx + 1)
-                return self.data.iloc[self.current_idx + 1 - available_bars:self.current_idx + 1].copy()
-
-            def get_symbol_tick(self, symbol):
-                if self.current_idx >= len(self.data):
-                    return None
-
-                class Tick:
-                    pass
-
-                tick = Tick()
-                tick.ask = self.data['close'].iloc[self.current_idx]
-                tick.bid = self.data['close'].iloc[self.current_idx]
-                tick.time = self.data['time'].iloc[self.current_idx].timestamp()
-                return tick
-
-            def place_order(self, action, symbol, volume, sl, tp, price=0.0, comment=""):
-                if action == "BUY":
-                    position_id = self.next_position_id
-                    self.next_position_id += 1
-                    return position_id
-                elif action == "SELL":
-                    # Extract position ID from comment if possible
-                    position_id = None
-                    if "ticket:" in comment:
-                        try:
-                            position_id = int(comment.split("ticket:")[1].strip())
-                        except:
-                            pass
-                    return position_id
-                return None
-
-            def get_open_positions(self, symbol=None):
-                return self.open_positions
-
-            def add_position(self, position):
-                self.open_positions.append(position)
-
-            def close_position(self, position_id):
-                self.open_positions = [p for p in self.open_positions if p['position_id'] != position_id]
-
-            def get_position_by_id(self, position_id):
-                for pos in self.open_positions:
-                    if pos['position_id'] == position_id:
-                        return pos
-                return None
-
-            def modify_stop_loss(self, symbol, ticket, new_stop):
-                for pos in self.open_positions:
-                    if pos['position_id'] == ticket:
-                        pos['stop_loss'] = new_stop
-                        return True
-                return False
-
-        return MockConnector(data)
-
-    def _create_mock_logger(self):
-        """Creëer een mock logger voor backtesting"""
-
-        class MockLogger:
-            def __init__(self):
-                self.trades = []
-
-            def log_trade(self, symbol, action, price, volume, sl, tp, comment):
-                position_id = None
-                if "ticket:" in comment:
-                    try:
-                        position_id = int(comment.split("ticket:")[1].strip())
-                    except:
-                        pass
-
-                self.trades.append({
-                    'symbol': symbol,
-                    'action': action,
-                    'price': price,
-                    'volume': volume,
-                    'sl': sl,
-                    'tp': tp,
-                    'comment': comment,
-                    'position_id': position_id
-                })
-
-            def log_info(self, message):
-                pass  # Negeer info logs tijdens backtesting
-
-            def log_status(self, account_info, open_positions):
-                pass  # Negeer status logs tijdens backtesting
-
-            def get_trades(self):
-                trades = self.trades.copy()
-                self.trades = []
-                return trades
-
-        return MockLogger()
-
-    def _create_risk_manager(self, risk_per_trade):
-        """Creëer een vereenvoudigde risicomanager voor backtesting"""
-
-        class MockRiskManager:
-            def __init__(self, risk_per_trade):
-                self.max_risk_per_trade = risk_per_trade
-
-            def can_trade(self):
-                return True
-
-            def check_trade_risk(self, symbol, volume, entry_price, stop_loss):
-                return True
-
-        return MockRiskManager(risk_per_trade)
-
-    def _calculate_statistics(self, trades_df, initial_balance):
-        """Bereken handelstatistieken"""
-        if trades_df.empty:
-            return {
-                'total_trades': 0,
-                'win_rate': 0,
-                'profit_factor': 0,
-                'avg_win': 0,
-                'avg_loss': 0,
-                'max_profit': 0,
-                'max_loss': 0,
-                'total_profit': 0,
-                'avg_hold_time': 0,
-                'return': 0
-            }
-
-        # Bereken handelsstatistieken
-        total_trades = len(trades_df)
-
-        # Winst/verlies statistieken
-        winning_trades = trades_df[trades_df['pnl'] > 0]
-        losing_trades = trades_df[trades_df['pnl'] <= 0]
-
-        win_rate = len(winning_trades) / total_trades if total_trades > 0 else 0
-
-        gross_profit = winning_trades['pnl'].sum() if not winning_trades.empty else 0
-        gross_loss = abs(losing_trades['pnl'].sum()) if not losing_trades.empty else 0
-
-        profit_factor = gross_profit / gross_loss if gross_loss > 0 else float('inf')
-
-        avg_win = winning_trades['pnl'].mean() if not winning_trades.empty else 0
-        avg_loss = losing_trades['pnl'].mean() if not losing_trades.empty else 0
-
-        max_profit = trades_df['pnl'].max() if not trades_df.empty else 0
-        max_loss = trades_df['pnl'].min() if not trades_df.empty else 0
-
-        total_profit = trades_df['pnl'].sum()
-
-        # Bereken gemiddelde houdduur
-        if 'entry_time' in trades_df.columns and 'exit_time' in trades_df.columns:
-            trades_df['duration'] = (trades_df['exit_time'] - trades_df['entry_time']).dt.total_seconds() / (
-                        60 * 60 * 24)
-            avg_hold_time = trades_df['duration'].mean()
-        else:
-            avg_hold_time = 0
-
-        # Bereken rendement
-        return_pct = (initial_balance + total_profit) / initial_balance - 1
-
-        return {
-            'total_trades': total_trades,
-            'win_rate': win_rate,
-            'profit_factor': profit_factor,
-            'avg_win': avg_win,
-            'avg_loss': avg_loss,
-            'max_profit': max_profit,
-            'max_loss': max_loss,
-            'total_profit': total_profit,
-            'avg_hold_time': avg_hold_time,
-            'return': return_pct
-        }
-
-    def plot_results(self, results_df, trades_df, stats, symbol, filename=None):
+    def calculate_atr(self, df, period=20):
         """
-        Plot backtest resultaten
+        Bereken Average True Range (ATR)
 
         Parameters:
         -----------
-        results_df : pandas.DataFrame
-            DataFrame met equity curve
-        trades_df : pandas.DataFrame
-            DataFrame met trades
-        stats : dict
-            Handelsstatistieken
+        df : pandas.DataFrame
+            DataFrame met prijsdata
+        period : int, optional
+            ATR periode
+
+        Returns:
+        --------
+        pandas.Series
+            ATR waarden
+        """
+        high = df['high']
+        low = df['low']
+        close = df['close'].shift(1)
+
+        tr1 = high - low
+        tr2 = abs(high - close)
+        tr3 = abs(low - close)
+
+        tr = pd.DataFrame({'tr1': tr1, 'tr2': tr2, 'tr3': tr3}).max(axis=1)
+        atr = tr.rolling(window=period).mean()
+
+        return atr
+
+    def run_backtest(self, symbol, start_date, end_date, timeframe=mt5.TIMEFRAME_D1, params=None):
+        """
+        Voer een backtest uit voor een bepaald symbool en periode
+
+        Parameters:
+        -----------
         symbol : str
             Het handelssymbool
-        filename : str, optional
-            Bestandsnaam voor de plot
+        start_date : datetime
+            Start datum
+        end_date : datetime
+            Eind datum
+        timeframe : int, optional
+            MT5 timeframe constante
+        params : dict, optional
+            Parameters voor de strategie, gebruikt standaard waardes indien niet opgegeven
+
+        Returns:
+        --------
+        pandas.DataFrame
+            DataFrame met backtest resultaten
         """
-        if results_df is None or results_df.empty:
-            print(f"Geen resultaten om te plotten voor {symbol}")
+        # Veilige manier om de parameters te tonen
+        print(f"\nBacktest starten voor {symbol} met timeframe {timeframe}")
+
+        # Valideer datum parameters
+        if not isinstance(start_date, datetime) or not isinstance(end_date, datetime):
+            print(f"Fout: start_date en end_date moeten datetime objecten zijn")
+            print(f"Ontvangen types: start_date={type(start_date)}, end_date={type(end_date)}")
+            return None
+
+        print(f"Periode: {start_date.strftime('%Y-%m-%d')} tot {end_date.strftime('%Y-%m-%d')}")
+
+        # Gebruik standaard parameters als geen parameters zijn opgegeven
+        if params is None:
+            params = self.default_params
+
+        # Haal historische data op
+        df = self.get_historical_data(symbol, timeframe, start_date, end_date)
+        if df.empty:
+            print(f"Backtest overgeslagen voor {symbol}: geen data beschikbaar")
+            return None
+
+        # Bereken indicatoren
+        df['atr'] = self.calculate_atr(df, params['atr_period'])
+        df['high_entry'] = df['high'].rolling(window=params['entry_period']).max()
+        df['low_exit'] = df['low'].rolling(window=params['exit_period']).min()
+
+        # Voeg trendfilter toe indien gewenst
+        if params['use_trend_filter']:
+            df['ema_50'] = df['close'].ewm(span=50, adjust=False).mean()
+            df['trend_bullish'] = df['close'] > df['ema_50']
+        else:
+            df['trend_bullish'] = True
+
+        # Initialiseer kolommen voor trades
+        df['position'] = 0  # 0: geen positie, 1: long
+        df['entry_price'] = np.nan
+        df['stop_loss'] = np.nan
+        df['position_size'] = np.nan
+        df['equity'] = self.config['mt5']['account_balance']
+        df['trade_result'] = np.nan
+        df['trade_profit'] = np.nan
+
+        # Simuleer trades
+        account_balance = self.config['mt5']['account_balance']
+        position = 0
+        entry_price = 0
+        stop_loss = 0
+        position_size = 0
+
+        # Loop door alle candlesticks
+        for i in range(params['entry_period'] + 1, len(df)):
+            current_price = df.iloc[i]['close']
+
+            # Als we geen positie hebben, check voor entry signaal
+            if position == 0:
+                # Check breakout (huidige prijs > vorige high_entry) en trendfilter
+                if (df.iloc[i]['close'] > df.iloc[i - 1]['high_entry'] and
+                        df.iloc[i]['atr'] > 0 and
+                        df.iloc[i]['trend_bullish']):
+                    # Entry signaal: open positie
+                    position = 1
+                    entry_price = current_price
+                    stop_loss = current_price - (params['atr_multiplier'] * df.iloc[i]['atr'])
+
+                    # Bereken positiegrootte op basis van risico
+                    risk_amount = account_balance * params['risk_per_trade']
+                    dollar_per_pip = risk_amount / (entry_price - stop_loss)
+
+                    # Vereenvoudigde berekening van lotgrootte (aan te passen per instrument)
+                    position_size = round(dollar_per_pip / 10000, 2)
+                    position_size = max(0.01, min(position_size, 10.0))
+
+                    # Sla trade informatie op
+                    df.at[df.index[i], 'position'] = position
+                    df.at[df.index[i], 'entry_price'] = entry_price
+                    df.at[df.index[i], 'stop_loss'] = stop_loss
+                    df.at[df.index[i], 'position_size'] = position_size
+
+            # Als we een positie hebben, check voor exit signaal
+            elif position == 1:
+                # Check exit criteria: prijs < vorige low_exit of stop loss geraakt
+                if (current_price < df.iloc[i - 1]['low_exit'] or current_price <= stop_loss):
+                    # Exit signaal: sluit positie
+                    exit_price = current_price
+                    trade_result = 1 if exit_price > entry_price else -1
+
+                    # Bereken winst/verlies (vereenvoudigd)
+                    pips_profit = exit_price - entry_price
+                    trade_profit = pips_profit * position_size * 10000  # Aanpassen per instrument
+
+                    # Update account balance
+                    account_balance += trade_profit
+
+                    # Sla trade resultaat op
+                    df.at[df.index[i], 'position'] = 0
+                    df.at[df.index[i], 'trade_result'] = trade_result
+                    df.at[df.index[i], 'trade_profit'] = trade_profit
+
+                    # Reset positie
+                    position = 0
+                    entry_price = 0
+                    stop_loss = 0
+                    position_size = 0
+
+            # Update equity curve
+            df.at[df.index[i], 'equity'] = account_balance
+
+        # Bereken performance metrics
+        self.calculate_performance_metrics(df, symbol, params)
+
+        return df
+
+    def calculate_performance_metrics(self, df, symbol, params):
+        """
+        Bereken performance metrics voor de backtest
+
+        Parameters:
+        -----------
+        df : pandas.DataFrame
+            DataFrame met backtest resultaten
+        symbol : str
+            Het handelssymbool
+        params : dict
+            Parameters gebruikt in de backtest
+        """
+        # Filter alleen trades
+        trades_df = df[df['trade_result'].notna()]
+
+        if len(trades_df) == 0:
+            print(f"Geen trades gevonden voor {symbol}")
+            self.metrics[symbol] = {
+                'total_trades': 0,
+                'win_rate': 0,
+                'profit_factor': 0,
+                'avg_profit': 0,
+                'max_drawdown': 0,
+                'sharpe_ratio': 0,
+                'return': 0,
+                'params': params
+            }
             return
 
-        # Maak plot
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8), gridspec_kw={'height_ratios': [3, 1]})
+        # Aantal trades
+        total_trades = len(trades_df)
 
-        # Plot 1: Equity Curve
-        ax1.plot(results_df['time'], results_df['equity'], label='Equity', color='blue')
-        ax1.plot(results_df['time'], results_df['balance'], label='Balance', color='green', alpha=0.7)
+        # Win ratio
+        winning_trades = len(trades_df[trades_df['trade_result'] > 0])
+        win_rate = winning_trades / total_trades if total_trades > 0 else 0
 
-        # Markeer trades op de equity curve
-        if not trades_df.empty:
-            for _, trade in trades_df.iterrows():
-                if 'entry_time' in trade and 'exit_time' in trade:
-                    # Kleur gebaseerd op winst/verlies
-                    color = 'green' if trade['pnl'] > 0 else 'red'
-                    ax1.axvspan(trade['entry_time'], trade['exit_time'], alpha=0.1, color=color)
+        # Profit factor
+        gross_profit = trades_df[trades_df['trade_profit'] > 0]['trade_profit'].sum()
+        gross_loss = abs(trades_df[trades_df['trade_profit'] < 0]['trade_profit'].sum())
+        profit_factor = gross_profit / gross_loss if gross_loss != 0 else float('inf')
 
-        ax1.set_title(f'Backtest Resultaten voor {symbol} - Rendement: {stats["return"] * 100:.2f}%')
-        ax1.set_ylabel('Account Waarde ($)')
+        # Gemiddelde winst per trade
+        avg_profit = trades_df['trade_profit'].mean()
+
+        # Maximale drawdown
+        df['peak'] = df['equity'].cummax()
+        df['drawdown'] = (df['equity'] - df['peak']) / df['peak']
+        max_drawdown = abs(df['drawdown'].min())
+
+        # Sharpe ratio (vereenvoudigd, dagelijkse basis)
+        if len(df) > 1:
+            df['daily_return'] = df['equity'].pct_change()
+            avg_return = df['daily_return'].mean()
+            std_return = df['daily_return'].std()
+            sharpe_ratio = (avg_return / std_return) * np.sqrt(252) if std_return != 0 else 0
+        else:
+            sharpe_ratio = 0
+
+        # Totaal rendement
+        total_return = (df['equity'].iloc[-1] - df['equity'].iloc[0]) / df['equity'].iloc[0]
+
+        # Sla metrics op
+        self.metrics[symbol] = {
+            'total_trades': total_trades,
+            'win_rate': win_rate,
+            'profit_factor': profit_factor,
+            'avg_profit': avg_profit,
+            'max_drawdown': max_drawdown,
+            'sharpe_ratio': sharpe_ratio,
+            'return': total_return,
+            'params': params
+        }
+
+        print(f"Backtest resultaten voor {symbol}:")
+        print(f"  Totaal trades: {total_trades}")
+        print(f"  Win rate: {win_rate:.2%}")
+        print(f"  Profit factor: {profit_factor:.2f}")
+        print(f"  Gemiddelde winst per trade: ${avg_profit:.2f}")
+        print(f"  Maximale drawdown: {max_drawdown:.2%}")
+        print(f"  Sharpe ratio: {sharpe_ratio:.2f}")
+        print(f"  Totaal rendement: {total_return:.2%}")
+
+    def plot_results(self, df, symbol, output_filename=None):
+        """
+        Plot de backtest resultaten
+
+        Parameters:
+        -----------
+        df : pandas.DataFrame
+            DataFrame met backtest resultaten
+        symbol : str
+            Het handelssymbool
+        output_filename : str, optional
+            Bestandsnaam voor het opslaan van de plot
+        """
+        if df is None or df.empty:
+            print(f"Geen data om te plotten voor {symbol}")
+            return
+
+        # Maak plots
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10), gridspec_kw={'height_ratios': [3, 1]})
+
+        # Plot 1: Prijs en trades
+        ax1.plot(df['time'], df['close'], label='Prijs', color='blue', alpha=0.5)
+
+        # Markeer entry en exit punten
+        entries = df[df['position'] == 1]
+        exits = df[df['trade_result'].notna()]
+
+        if not entries.empty:
+            ax1.scatter(entries['time'], entries['entry_price'], color='green', marker='^', label='Entry')
+
+        if not exits.empty:
+            # Kleur exits op basis van resultaat (groen = winst, rood = verlies)
+            for idx, row in exits.iterrows():
+                color = 'green' if row['trade_result'] > 0 else 'red'
+                ax1.scatter(row['time'], row['close'], color=color, marker='v')
+
+        # Voeg stop loss niveaus toe
+        for idx, row in entries.iterrows():
+            if not np.isnan(row['stop_loss']):
+                ax1.plot([row['time'], row['time']], [row['entry_price'], row['stop_loss']], 'r--', alpha=0.5)
+
+        ax1.set_title(f'Backtest resultaten voor {symbol}')
+        ax1.set_ylabel('Prijs')
         ax1.legend()
-        ax1.grid(True, alpha=0.3)
+        ax1.grid(True)
 
-        # Plot 2: Open Positions
-        ax2.plot(results_df['time'], results_df['open_positions'], drawstyle='steps-post', color='purple')
-        ax2.set_title('Open Posities')
-        ax2.set_ylabel('Aantal')
+        # Plot 2: Equity curve
+        ax2.plot(df['time'], df['equity'], label='Account Equity', color='purple')
         ax2.set_xlabel('Datum')
-        ax2.grid(True, alpha=0.3)
+        ax2.set_ylabel('Equity ($)')
+        ax2.grid(True)
 
         plt.tight_layout()
 
         # Sla plot op indien gewenst
-        if filename:
-            output_path = os.path.join(self.output_dir, filename)
+        if output_filename:
+            output_path = os.path.join(self.output_dir, output_filename)
             plt.savefig(output_path)
             print(f"Plot opgeslagen als {output_path}")
 
         plt.show()
 
-        # Toon handelsstatistieken
-        print("\nHandelsstatistieken:")
-        print(f"Totaal aantal trades: {stats['total_trades']}")
-        print(f"Winratio: {stats['win_rate']:.2%}")
-        print(f"Profit factor: {stats['profit_factor']:.2f}")
-        print(f"Gemiddelde winst: ${stats['avg_win']:.2f}")
-        print(f"Gemiddeld verlies: ${stats['avg_loss']:.2f}")
-        print(f"Maximale winst: ${stats['max_profit']:.2f}")
-        print(f"Maximaal verlies: ${stats['max_loss']:.2f}")
-        print(f"Totale winst: ${stats['total_profit']:.2f}")
-        print(f"Gemiddelde houdduur: {stats['avg_hold_time']:.1f} dagen")
-        print(f"Rendement: {stats['return'] * 100:.2f}%")
+    def optimize_parameters(self, symbol, start_date, end_date, param_grid=None):
+        """
+        Optimaliseer strategie parameters door grid search
+
+        Parameters:
+        -----------
+        symbol : str
+            Het handelssymbool
+        start_date : datetime
+            Start datum
+        end_date : datetime
+            Eind datum
+        param_grid : dict, optional
+            Grid van te testen parameters
+
+        Returns:
+        --------
+        dict
+            Beste parameters gevonden
+        """
+        if param_grid is None:
+            # Standaard parameter grid voor optimalisatie
+            param_grid = {
+                'entry_period': [10, 20, 30, 40, 55],
+                'exit_period': [5, 10, 15, 20],
+                'atr_multiplier': [1.5, 2.0, 2.5, 3.0],
+                'use_trend_filter': [True, False]
+            }
+
+        # Stel alle mogelijke parameter combinaties samen
+        param_keys = param_grid.keys()
+        param_values = param_grid.values()
+        param_combinations = list(itertools.product(*param_values))
+
+        print(f"Optimalisatie gestart voor {symbol}...")
+        print(f"Aantal parameter combinaties: {len(param_combinations)}")
+
+        best_return = -float('inf')
+        best_params = None
+        best_sharpe = -float('inf')
+        best_sharpe_params = None
+
+        # Test elke parameter combinatie
+        for i, combo in enumerate(param_combinations):
+            params = dict(zip(param_keys, combo))
+
+            # Voeg vaste parameters toe die niet geoptimaliseerd worden
+            params['atr_period'] = 20
+            params['risk_per_trade'] = self.default_params['risk_per_trade']
+
+            print(f"Testing combination {i + 1}/{len(param_combinations)}: {params}")
+
+            # Voer backtest uit met deze parameters
+
+            result_df = self.run_backtest(symbol, start_date, end_date, mt5.TIMEFRAME_D1, params=params)
+
+            # Haal metrics op
+            if symbol in self.metrics:
+                metrics = self.metrics[symbol]
+                current_return = metrics['return']
+                current_sharpe = metrics['sharpe_ratio']
+
+                # Check if better than current best (by return)
+                if current_return > best_return:
+                    best_return = current_return
+                    best_params = params.copy()
+
+                # Check if better than current best (by Sharpe ratio)
+                if current_sharpe > best_sharpe:
+                    best_sharpe = current_sharpe
+                    best_sharpe_params = params.copy()
+
+        print("\nOptimalisatie resultaten:")
+        print(f"\nBeste parameters op basis van rendement (return: {best_return:.2%}):")
+        for key, value in best_params.items():
+            print(f"  {key}: {value}")
+
+        print(f"\nBeste parameters op basis van Sharpe ratio (Sharpe: {best_sharpe:.2f}):")
+        for key, value in best_sharpe_params.items():
+            print(f"  {key}: {value}")
+
+        # Sla resultaten op
+        self.best_params = best_params
+        self.best_sharpe_params = best_sharpe_params
+
+        return {
+            'best_return_params': best_params,
+            'best_sharpe_params': best_sharpe_params
+        }

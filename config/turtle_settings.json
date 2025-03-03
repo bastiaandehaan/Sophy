@@ -11,6 +11,7 @@
     "timeframe": "H4",
     "risk_per_trade": 0.015,
     "account_balance": 100000,
-    "leverage": 10
+    "leverage": 30,
+    "swing_mode": true
   }
 }

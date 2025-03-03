@@ -1,4 +1,3 @@
-# main.py
 import time
 import sys
 import os
@@ -10,10 +9,10 @@ import matplotlib.pyplot as plt
 # Importeer modules
 from modules.mt5_connector import MT5Connector
 from modules.strategies.turtle_strategy import TurtleStrategy
-from modules.strategies.enhanced_turtle_strategy import EnhancedTurtleStrategy
 from modules.risk_manager import RiskManager
 from modules.backtester import Backtester
 from utils.logger import Logger
+from utils.visualizer import Visualizer
 
 
 def load_config(config_path):
@@ -31,7 +30,7 @@ def load_config(config_path):
 
 def main():
     """Hoofdfunctie van de tradingbot"""
-    print(f"TurtleTrader bot gestart op {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"Starting TurtleTrader bot at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
     # Laad configuratie
     config_path = os.path.join('config', 'turtle_settings.json')
@@ -48,43 +47,65 @@ def main():
     os.makedirs(log_dir, exist_ok=True)
     logger = Logger(os.path.join(log_dir, 'trading_journal.csv'))
 
-    # Initialiseer risicomanager
+    # Initialiseer risicomanager met de leverage parameter
     risk_manager = RiskManager(
         max_risk_per_trade=config['mt5']['risk_per_trade'],
         max_daily_drawdown=0.05,  # 5% maximale dagelijkse drawdown
         max_total_drawdown=0.1,  # 10% maximale totale drawdown
-        leverage=config['mt5'].get('leverage', 1)
+        leverage=config['mt5'].get('leverage', 30)  # Gebruik leverage uit config, standaard 30 voor FTMO Swing
     )
 
-    # Vraag welke strategie te gebruiken
-    print("\nKies een strategie:")
-    print("1. Originele Turtle Strategy")
-    print("2. Verbeterde Turtle Strategy")
+    # Initialiseer strategie
+    strategy = TurtleStrategy(
+        connector=connector,
+        risk_manager=risk_manager,
+        logger=logger,
+        config=config
+    )
 
-    strategy_choice = input("Keuze (1/2): ")
+    # Initialiseer visualizer
+    visualizer = Visualizer(os.path.join(log_dir, 'trading_journal.csv'), 'data')
 
-    # Initialiseer de gekozen strategie
-    if strategy_choice == "2":
-        print("Verbeterde Turtle Strategy gekozen")
-        strategy = EnhancedTurtleStrategy(
-            connector=connector,
-            risk_manager=risk_manager,
-            logger=logger,
-            config=config
-        )
-    else:
-        print("Originele Turtle Strategy gekozen")
-        strategy = TurtleStrategy(
-            connector=connector,
-            risk_manager=risk_manager,
-            logger=logger,
-            config=config
-        )
+    # Toon configuratie-instellingen
+    print("\n=== Configuratie ===")
+    print(f"Symbolen: {', '.join(config['mt5']['symbols'])}")
+    print(f"Timeframe: {config['mt5'].get('timeframe', 'H4')}")
+    print(f"FTMO Swing Mode: {'Ingeschakeld' if config['mt5'].get('swing_mode', False) else 'Uitgeschakeld'}")
+    print(f"Leverage: 1:{config['mt5'].get('leverage', 30)}")
+    print(f"Risico per trade: {config['mt5']['risk_per_trade'] * 100:.1f}%")
+    print(f"Max. dagelijkse drawdown: 5%")
+    print(f"Max. totale drawdown: 10%")
+    print("===================\n")
 
     # Hoofdlus
     try:
+        # Loop teller voor periodic checks
+        cycle_count = 0
+
         while True:
-            print(f"Verwerking cyclus gestart op {datetime.now().strftime('%H:%M:%S')}")
+            cycle_time = datetime.now()
+            print(f"\nVerwerking cyclus #{cycle_count + 1} gestart op {cycle_time.strftime('%H:%M:%S')}")
+
+            # Check account status en FTMO limieten
+            stop_trading, reason = strategy.check_daily_limit()
+            if stop_trading:
+                logger.log_info(f"Trading gestopt: {reason}", level="WARNING")
+                print(f"\n⚠️ TRADING GESTOPT: {reason}")
+                print("Bot zal blijven draaien voor monitoring, maar geen nieuwe trades openen.")
+
+                # Toon huidige equity curve
+                visualizer.plot_equity_curve()
+
+                # Blijf draaien voor monitoring zonder te traden
+                while True:
+                    time.sleep(300)  # Check elke 5 minuten
+                    account_info = connector.get_account_info()
+                    open_positions = strategy.get_open_positions()
+                    logger.log_status(account_info, open_positions)
+                    print(
+                        f"Monitoring: Balance={account_info.get('balance', 'N/A')}, Equity={account_info.get('equity', 'N/A')}")
+
+            # Verwerk symbolen
             for symbol in config['mt5']['symbols']:
                 print(f"Verwerking {symbol}...")
                 strategy.process_symbol(symbol)
@@ -96,18 +117,38 @@ def main():
 
             # Summary printen naar console
             print(f"Status: Balance={account_info.get('balance', 'N/A')}, Equity={account_info.get('equity', 'N/A')}")
-            print(f"Wachten voor volgende cyclus...")
 
-            # Wacht voordat we de volgende cyclus starten
-            time.sleep(60)  # Check elke minuut
+            # Verhoog cycle counter
+            cycle_count += 1
+
+            # Periodieke visualisatie (elke 10 cycli)
+            if cycle_count % 10 == 0:
+                print("Periodieke analyse uitvoeren...")
+                visualizer.plot_equity_curve()
+                visualizer.plot_trade_results()
+
+            # Bereken wachttijd tot volgende cyclus
+            elapsed = (datetime.now() - cycle_time).total_seconds()
+            wait_time = max(60 - elapsed, 5)  # Minimaal 5 seconden wachten
+
+            print(f"Wachten voor volgende cyclus: {wait_time:.0f} seconden...")
+            time.sleep(wait_time)
 
     except KeyboardInterrupt:
-        print("Bot gestopt door gebruiker.")
+        print("\nBot gestopt door gebruiker.")
     except Exception as e:
         print(f"Onverwachte fout: {e}")
         import traceback
         traceback.print_exc()
     finally:
+        # Laatste visualisaties bijwerken bij afsluiten
+        try:
+            visualizer.plot_equity_curve()
+            visualizer.plot_trade_results()
+            visualizer.plot_performance_summary()
+        except Exception as viz_error:
+            print(f"Kon visualisaties niet genereren bij afsluiten: {viz_error}")
+
         connector.disconnect()
         print("Bot gestopt en verbinding gesloten.")
 
@@ -126,13 +167,19 @@ def test_connection():
         account_info = connector.get_account_info()
         print(f"Account balans: {account_info.get('balance', 'Onbekend')}")
         print(f"Account equity: {account_info.get('equity', 'Onbekend')}")
+        print(f"Account leverage: 1:{account_info.get('leverage', 'Onbekend')}")
 
         # Test data ophalen voor één symbool
         symbol = config['mt5']['symbols'][0]
         print(f"Data ophalen voor {symbol}...")
-        df = connector.get_historical_data(symbol, mt5.TIMEFRAME_H4, 10)
+
+        # Gebruik timeframe uit config
+        timeframe_str = config['mt5'].get('timeframe', 'H4')
+        timeframe = connector.get_timeframe_constant(timeframe_str)
+
+        df = connector.get_historical_data(symbol, timeframe, 10)
         if not df.empty:
-            print(f"✅ Data succesvol opgehaald voor {symbol}")
+            print(f"✅ Data succesvol opgehaald voor {symbol} ({timeframe_str})")
             print(df.tail(3))
         else:
             print(f"❌ Geen data opgehaald voor {symbol}")
@@ -145,7 +192,7 @@ def test_connection():
 
 
 def run_backtest():
-    """Voer een backtest uit van de trading strategie"""
+    """Voer een backtest uit van de Turtle Trading strategie"""
     print("Backtesting module gestart...")
 
     # Laad configuratie
@@ -162,83 +209,90 @@ def run_backtest():
         # Initialiseer backtester
         backtester = Backtester(connector, config)
 
-        # Vraag om strategie keuze
-        print("\nKies een strategie om te testen:")
-        print("1. Originele Turtle Strategy")
-        print("2. Verbeterde Turtle Strategy")
-        print("3. Vergelijk beide strategieën")
-
-        choice = input("Keuze (1/2/3): ")
-
         # Definieer test periode
         end_date = datetime.now()
-        start_date = end_date - timedelta(days=365)  # Standaard 1 jaar
+        period_choice = input("Backtest periode (1=1 maand, 3=3 maanden, 6=6 maanden, 12=1 jaar, 24=2 jaar): ")
+        try:
+            months = int(period_choice)
+            if months not in [1, 3, 6, 12, 24]:
+                months = 6  # Default 6 maanden
+        except ValueError:
+            months = 6  # Default bij ongeldige invoer
 
-        # Vraag naar aangepaste testperiode
-        custom_period = input("Aangepaste testperiode? (j/n): ").lower()
-        if custom_period == 'j':
-            try:
-                years = int(input("Aantal jaren terug: "))
-                start_date = end_date - timedelta(days=365 * years)
-            except ValueError:
-                print("Ongeldige invoer, gebruik standaard 1 jaar.")
+        start_date = end_date - timedelta(days=30 * months)  # 30 dagen per maand
 
         print(f"Backtest periode: {start_date.strftime('%Y-%m-%d')} tot {end_date.strftime('%Y-%m-%d')}")
 
-        # Loop door symbolen of selecteer specifiek symbool
-        symbols = config['mt5']['symbols'].copy()
-        if len(symbols) > 1:
-            print("\nKies een symbool:")
-            for i, sym in enumerate(symbols, 1):
-                print(f"{i}. {sym}")
-            print(f"{len(symbols) + 1}. Alle symbolen")
+        # Bepaal juiste timeframe uit config
+        timeframe_str = config['mt5'].get('timeframe', 'H4')
+        timeframe = connector.get_timeframe_constant(timeframe_str)
 
-            sym_choice = input(f"Keuze (1-{len(symbols) + 1}): ")
-            try:
-                sym_idx = int(sym_choice) - 1
-                if 0 <= sym_idx < len(symbols):
-                    symbols = [symbols[sym_idx]]
-                elif sym_idx != len(symbols):
-                    print("Ongeldige keuze, alle symbolen worden getest.")
-            except ValueError:
-                print("Ongeldige invoer, alle symbolen worden getest.")
+        # Test elke individuele strategie (testen per symbool)
+        for symbol in config['mt5']['symbols']:
+            print(f"\nBacktesting strategie op {symbol}...")
 
-        # Voer backtest(s) uit
-        if choice == "1" or choice == "3":
-            # Test Originele Turtle Strategy
-            for symbol in symbols:
-                results_df, trades_df, stats = backtester.run_backtest(
-                    symbol=symbol,
-                    strategy_class=TurtleStrategy,
-                    start_date=start_date,
-                    end_date=end_date
-                )
+            # Pas parameters aan voor FTMO Swing mode
+            custom_params = {
+                'entry_period': 40 if config['mt5'].get('swing_mode', False) else 20,
+                'exit_period': 20 if config['mt5'].get('swing_mode', False) else 10,
+                'atr_period': 20,
+                'atr_multiplier': 2.5 if config['mt5'].get('swing_mode', False) else 2.0,
+                'risk_per_trade': config['mt5']['risk_per_trade'],
+                'use_trend_filter': True
+            }
 
-                if results_df is not None:
-                    backtester.plot_results(
-                        results_df, trades_df, stats, symbol,
-                        f"{symbol}_original_results.png"
-                    )
+            # Voer backtest uit en geef correcte parameters door
+            result_df = backtester.run_backtest(
+                symbol=symbol,
+                start_date=start_date,
+                end_date=end_date,
+                timeframe=timeframe,
+                params=custom_params
+            )
 
-        if choice == "2" or choice == "3":
-            # Test Verbeterde Turtle Strategy
-            for symbol in symbols:
-                results_df, trades_df, stats = backtester.run_backtest(
-                    symbol=symbol,
-                    strategy_class=EnhancedTurtleStrategy,
-                    start_date=start_date,
-                    end_date=end_date
-                )
+            if result_df is not None:
+                # Plot resultaten
+                backtester.plot_results(result_df, symbol, f"{symbol}_backtest_results.png")
 
-                if results_df is not None:
-                    backtester.plot_results(
-                        results_df, trades_df, stats, symbol,
-                        f"{symbol}_enhanced_results.png"
-                    )
+        # Optioneel: parameter optimalisatie
+        if input("Wil je parameter optimalisatie uitvoeren? (j/n): ").lower() == 'j':
+            symbol = config['mt5']['symbols'][0]  # Kies een symbool voor optimalisatie
+            print(f"\nParameter optimalisatie voor {symbol}...")
 
-        # Optioneel: vergelijk resultaten van beide strategieën
-        if choice == "3" and backtester.metrics:
-            compare_strategies(backtester.metrics)
+            # Aangepast parameter grid voor FTMO Swing
+            if config['mt5'].get('swing_mode', False):
+                param_grid = {
+                    'entry_period': [30, 40, 50, 60],
+                    'exit_period': [15, 20, 25, 30],
+                    'atr_multiplier': [2.0, 2.5, 3.0, 3.5],
+                    'use_trend_filter': [True]
+                }
+            else:
+                param_grid = {
+                    'entry_period': [10, 20, 30, 40],
+                    'exit_period': [5, 10, 15, 20],
+                    'atr_multiplier': [1.5, 2.0, 2.5, 3.0],
+                    'use_trend_filter': [True, False]
+                }
+
+            # Start optimalisatie
+            best_params = backtester.optimize_parameters(
+                symbol=symbol,
+                start_date=start_date,
+                end_date=end_date,
+                param_grid=param_grid
+            )
+
+            # Test de beste parameters
+            print("\nTesten van beste parameters...")
+            result_df = backtester.run_backtest(
+                symbol=symbol,
+                start_date=start_date,
+                end_date=end_date,
+                timeframe=timeframe,
+                params=best_params['best_return_params']
+            )
+            backtester.plot_results(result_df, symbol, f"{symbol}_optimized_backtest.png")
 
     except Exception as e:
         print(f"Fout tijdens backtesting: {e}")
@@ -249,32 +303,51 @@ def run_backtest():
         print("Backtesting voltooid")
 
 
-def compare_strategies(metrics):
-    """
-    Vergelijk de resultaten van verschillende strategieën
+def analyze_performance():
+    """Analyseer trading performance en genereer grafieken"""
+    print("Performance analyse gestart...")
 
-    Parameters:
-    -----------
-    metrics : dict
-        Dictionary met metriek per strategie per symbool
-    """
-    print("\n" + "=" * 50)
-    print("VERGELIJKING VAN STRATEGIEËN")
-    print("=" * 50)
+    # Controleer of logs bestaan
+    log_file = os.path.join('logs', 'trading_journal.csv')
+    if not os.path.exists(log_file):
+        print(f"Log bestand niet gevonden: {log_file}")
+        print("Voer eerst de bot uit om logs te genereren.")
+        return
 
-    # Toon tabel met resultaten per strategie en symbool
-    headers = ["Symbool", "Strategie", "Trades", "Win%", "Profit Factor", "Rendement"]
-    print(f"{headers[0]:<8} {headers[1]:<20} {headers[2]:<8} {headers[3]:<8} {headers[4]:<15} {headers[5]:<10}")
-    print("-" * 70)
+    # Initialiseer visualizer
+    visualizer = Visualizer(log_file, 'data/analysis')
 
-    # TODO: Implementeer vergelijking tussen TurtleStrategy en EnhancedTurtleStrategy
+    try:
+        # Genereer alle beschikbare visualisaties
+        print("Genereren van equity curve...")
+        equity_path = visualizer.plot_equity_curve()
+
+        print("Genereren van trades overzicht...")
+        trades_path = visualizer.plot_trade_results()
+
+        print("Genereren van performance samenvatting...")
+        summary_path = visualizer.plot_performance_summary()
+
+        print("\nAnalyse voltooid. Grafieken opgeslagen in de 'data/analysis' map:")
+        if equity_path:
+            print(f"- Equity curve: {os.path.basename(equity_path)}")
+        if trades_path:
+            print(f"- Trades overzicht: {os.path.basename(trades_path)}")
+        if summary_path:
+            print(f"- Performance samenvatting: {os.path.basename(summary_path)}")
+
+    except Exception as e:
+        print(f"Fout tijdens analyse: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 if __name__ == "__main__":
-    print("\n==== TurtleTrader Menu ====")
+    print("\n==== TurtleTrader FTMO Swing Edition ====")
     print("1. Start Live Trading")
     print("2. Run Connection Test")
     print("3. Run Backtest")
+    print("4. Analyze Performance")
     print("0. Exit")
 
     choice = input("\nKies een optie: ")
@@ -285,6 +358,8 @@ if __name__ == "__main__":
         test_connection()
     elif choice == "3":
         run_backtest()
+    elif choice == "4":
+        analyze_performance()
     elif choice == "0":
         print("Programma afgesloten")
     else:
