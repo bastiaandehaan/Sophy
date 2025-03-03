@@ -12,3 +12,5 @@ data/
 *.log
 *.csv
 *.png
+*.py[cod]
+*$py.class
