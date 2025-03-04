@@ -9,9 +9,16 @@
       "US30": "US30.cash"
     },
     "timeframe": "H4",
-    "risk_per_trade": 0.015,
     "account_balance": 100000,
-    "leverage": 30,
+    "risk_per_trade": 0.015,
     "swing_mode": true
-  }
+  },
+  "risk": {
+    "max_risk_per_trade": 0.015,
+    "max_daily_drawdown": 0.05,
+    "max_total_drawdown": 0.10,
+    "leverage": 30
+  },
+  "log_file": "logs/trading_log.csv",
+  "output_dir": "data"
 }
