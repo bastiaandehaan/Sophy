@@ -30,7 +30,7 @@ def main():
         return
 
     # Laad configuratie voor initiële balans
-    config_path = os.path.join('config', 'config.json')
+    config_path = os.path.join('Sophy/config', 'settings.json')
     try:
         config = load_config(config_path)
         initial_balance = config['mt5'].get('account_balance', 100000)

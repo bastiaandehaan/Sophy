@@ -5,7 +5,7 @@ import logging
 from datetime import datetime, timedelta
 from modules.mt5_connector import MT5Connector
 from modules.risk_manager import RiskManager
-from modules.startegy.turtle import TurtleStrategy
+from modules.strategy.turtle import TurtleStrategy
 from analysis.backtester import Backtester
 from utils.logger import Logger
 from utils.visualizer import Visualizer
@@ -19,7 +19,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class TradingBot:
-    def __init__(self, config_path="config/config.json"):
+    def __init__(self, config_path="config/settings.json"):
         """Initialiseer de trading bot met configuratie en modules."""
         self.config = self._load_config(config_path)
         self.connector = MT5Connector(self.config["mt5"])
