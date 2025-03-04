@@ -1,49 +1,36 @@
 # src/strategy/strategy_factory.py
-from typing import Dict, Type
+from typing import Dict, Type, Optional
 
 from src.strategy.base_strategy import BaseStrategy
 from src.strategy.turtle_strategy import TurtleStrategy
 
 
-class StrategyFactory:
-    """Factory voor het creëren van trading strategie-instanties"""
-
-    _strategies: Dict[str, Type[BaseStrategy]] = {
+def create_strategy(strategy_name: str, connector, risk_manager, logger, config) -> Optional[BaseStrategy]:
+    """Create an instance of the requested strategy"""
+    # Strategy mapping
+    strategies = {
         "turtle": TurtleStrategy,
-        "turtle_swing": TurtleStrategy,  # Met andere configuratie
-        # Voeg hier meer strategieën toe wanneer nodig
+        "turtle_swing": TurtleStrategy,  # With different configuration
+        # Add more strategies here when needed
     }
 
-    @classmethod
-    def create_strategy(cls, strategy_name: str, connector, risk_manager, logger, config) -> BaseStrategy:
-        """
-        Creëert een instance van de gevraagde strategie
+    if strategy_name not in strategies:
+        logger.log_info(f"Unknown strategy: {strategy_name}", level="ERROR")
+        return None
 
-        Args:
-            strategy_name: Naam van de strategie
-            connector: MT5 connector instantie
-            risk_manager: Risk manager instantie
-            logger: Logger instantie
-            config: Configuratieobject
+    strategy_class = strategies[strategy_name]
 
-        Returns:
-            Een instantie van de gevraagde strategie
+    # Apply special configuration if needed
+    if strategy_name == "turtle_swing":
+        config['strategy']['swing_mode'] = True
 
-        Raises:
-            ValueError: Als de strategie niet bestaat
-        """
-        if strategy_name not in cls._strategies:
-            raise ValueError(f"Onbekende strategie: {strategy_name}")
-
-        strategy_class = cls._strategies[strategy_name]
-
-        # Pas speciale configuratie toe als nodig
-        if strategy_name == "turtle_swing":
-            config['mt5']['swing_mode'] = True
-
+    try:
         return strategy_class(connector, risk_manager, logger, config)
+    except Exception as e:
+        logger.log_info(f"Error creating strategy: {e}", level="ERROR")
+        return None
 
-    @classmethod
-    def list_available_strategies(cls) -> list:
-        """Geeft een lijst van beschikbare strategieën"""
-        return list(cls._strategies.keys())
+
+def list_available_strategies() -> list:
+    """Return a list of available strategies"""
+    return ["turtle", "turtle_swing"]
