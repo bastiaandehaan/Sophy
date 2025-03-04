@@ -1,5 +1,5 @@
 # src/strategy/strategy_factory.py
-from typing import Dict, Type, Any
+from typing import Dict, Type
 
 from src.strategy.base_strategy import BaseStrategy
 from src.strategy.turtle_strategy import TurtleStrategy
