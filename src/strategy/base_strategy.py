@@ -70,3 +70,7 @@ class Strategy(ABC):
         str : Strategienaam
         """
         return self.name
+
+
+class BaseStrategy:
+    pass
