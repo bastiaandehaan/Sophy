@@ -1,7 +1,7 @@
 # tests/integration/test_mt5_connectivity.py
-import pytest
-import pandas as pd
 from datetime import datetime, timedelta
+
+import pytest
 from turtle_trader.data.mt5_connector import MT5Connector
 from turtle_trader.utils.config import load_config
 

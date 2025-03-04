@@ -1,13 +1,11 @@
 # main.py
-import logging
 import time
-from datetime import datetime
 
 from sophy.core.config import load_config
 from sophy.core.connector import MT5Connector
 from sophy.core.risk_manager import RiskManager
-from sophy.utils.logger import setup_logger
 from sophy.strategy_factory import create_strategy
+from sophy.utils.logger import setup_logger
 
 
 def main():

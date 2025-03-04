@@ -1,7 +1,6 @@
 # sophy/utils/indicators.py
 import numpy as np
 import pandas as pd
-from typing import Optional, Union, List
 
 
 def calculate_atr(df: pd.DataFrame, period: int = 14) -> np.ndarray:

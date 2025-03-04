@@ -1,10 +1,11 @@
 # validator.py
-from typing import Dict, Tuple, Optional
-from datetime import datetime, date
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
 import os
+from datetime import datetime, date
+from typing import Dict, Tuple, Optional
+
+import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
 
 
 class FTMOValidator:

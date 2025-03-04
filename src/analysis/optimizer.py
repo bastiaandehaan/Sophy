@@ -1,9 +1,7 @@
 # turtle_trader/analysis/optimizer.py
-import numpy as np
-import pandas as pd
-from typing import Dict, List, Tuple, Callable
-from itertools import product
 import multiprocessing as mp
+from itertools import product
+from typing import Dict, List, Callable
 
 
 class BacktestOptimizer:
@@ -35,7 +33,7 @@ class BacktestOptimizer:
             use_parallel: Whether to use parallel processing
 
         Returns:
-            Dict with best parameters and performance metrics
+            Dict with best parameters and presentation metrics
         """
         # Generate all parameter combinations
         param_keys = list(param_grid.keys())
@@ -62,7 +60,7 @@ class BacktestOptimizer:
                 use_parallel=False  # Already parallelized at the parameter level
             )
 
-            # Calculate performance metrics
+            # Calculate presentation metrics
             metrics = self._calculate_performance_metrics(backtest_results)
 
             return {

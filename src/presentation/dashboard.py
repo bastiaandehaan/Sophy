@@ -1,15 +1,13 @@
 # turtle_trader/presentation/dashboard.py
+from typing import Dict
+
 import dash
 from dash import dcc, html
 from dash.dependencies import Input, Output
-import plotly.graph_objs as go
-import pandas as pd
-import numpy as np
-from typing import Dict, List
 
 
 class TradingDashboard:
-    """Real-time dashboard for monitoring trading performance"""
+    """Real-time dashboard for monitoring trading presentation"""
 
     def __init__(self, config: Dict[str, any], logger: any) -> None:
         self.config = config

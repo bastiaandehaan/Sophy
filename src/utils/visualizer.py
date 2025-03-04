@@ -1,11 +1,12 @@
-import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
-import seaborn as sns
-import numpy as np
-from datetime import datetime, timedelta
-import os
 import json
+import os
+from datetime import datetime
+
+import matplotlib.dates as mdates
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
 
 
 class Visualizer:
@@ -34,7 +35,7 @@ class Visualizer:
         # Maak output map aan als deze niet bestaat
         os.makedirs(output_dir, exist_ok=True)
 
-        # Pad naar performance stats file
+        # Pad naar presentation stats file
         log_dir = os.path.dirname(log_file)
         self.stats_file = os.path.join(log_dir, 'performance_stats.json')
 
@@ -58,7 +59,7 @@ class Visualizer:
 
     def load_performance_stats(self):
         """
-        Laad performance statistieken uit JSON bestand
+        Laad presentation statistieken uit JSON bestand
 
         Returns:
         --------
@@ -73,7 +74,7 @@ class Visualizer:
             with open(self.stats_file, 'r') as file:
                 return json.load(file)
         except Exception as e:
-            print(f"Fout bij laden van performance stats: {e}")
+            print(f"Fout bij laden van presentation stats: {e}")
             return {}
 
     def plot_equity_curve(self, include_drawdown=True):
@@ -426,7 +427,7 @@ class Visualizer:
         stats = self.load_performance_stats()
 
         if df.empty:
-            print("Geen data beschikbaar voor performance summary")
+            print("Geen data beschikbaar voor presentation summary")
             return None
 
         # Filter trades
@@ -458,7 +459,7 @@ class Visualizer:
                 'total': len(symbol_df)
             }
 
-            # Bereken performance als mogelijk
+            # Bereken presentation als mogelijk
             pairs = self._pair_trades(symbol_df)
             wins = 0
             losses = 0

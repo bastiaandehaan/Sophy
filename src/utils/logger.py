@@ -1,7 +1,7 @@
 import csv
+import json
 import os
 from datetime import datetime
-import json
 
 
 class Logger:
@@ -19,7 +19,7 @@ class Logger:
         self.log_file = log_file_path
         self.setup_log_file()
 
-        # Logging voor performance statistieken
+        # Logging voor presentation statistieken
         log_dir = os.path.dirname(log_file_path)
         self.stats_file = os.path.join(log_dir, 'performance_stats.json')
         self.initialize_stats()
@@ -36,7 +36,7 @@ class Logger:
                 ])
 
     def initialize_stats(self):
-        """Initialiseer performance statistieken bestand als het nog niet bestaat"""
+        """Initialiseer presentation statistieken bestand als het nog niet bestaat"""
         if not os.path.exists(self.stats_file):
             default_stats = {
                 'total_trades': 0,
@@ -177,7 +177,7 @@ class Logger:
 
     def update_trade_stats(self, timestamp, symbol, action, price, volume, comment):
         """
-        Update performance statistieken na een trade
+        Update presentation statistieken na een trade
 
         Parameters:
         -----------

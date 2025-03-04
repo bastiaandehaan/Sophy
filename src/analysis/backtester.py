@@ -1,13 +1,12 @@
 # turtle_trader/analysis/backtester.py
+from datetime import datetime
+from typing import Dict, List, Callable
+
 import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta
-import multiprocessing as mp
-from typing import Dict, List, Optional, Tuple, Callable
 
 
 class Backtester:
-    """High-performance backtesting engine with parallel processing capabilities"""
+    """High-presentation backtesting engine with parallel processing capabilities"""
 
     def __init__(self, config: Dict[str, any], connector: any, logger: any) -> None:
         self.config = config

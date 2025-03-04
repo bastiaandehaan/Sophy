@@ -1,8 +1,7 @@
 # turtle_trader/data/mt5_connector.py
-from datetime import datetime
-import MetaTrader5 as mt5
+from typing import Dict
+
 import pandas as pd
-from typing import Dict, List, Optional, Union, Tuple
 
 
 class MT5Connector:
