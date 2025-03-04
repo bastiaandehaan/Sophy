@@ -1,4 +1,4 @@
-# turtle_trader/analysis/backtest_optimizer.py
+# turtle_trader/analysis/optimizer.py
 import numpy as np
 import pandas as pd
 from typing import Dict, List, Tuple, Callable

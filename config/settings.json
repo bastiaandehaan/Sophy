@@ -1,0 +1,36 @@
+// config/settings.json
+{
+  "mt5": {
+    "login": 1520533067,
+    "password": "YOUR_PASSWORD",
+    "server": "FTMO-Demo2",
+    "mt5_pathway": "C:\\Program Files\\FTMO MetaTrader 5\\terminal64.exe",
+    "symbols": ["EURUSD", "XAUUSD", "US30"],
+    "symbol_mapping": {
+      "US30": "US30.cash"
+    },
+    "timeframe": "H4",
+    "account_balance": 100000
+  },
+  "risk": {
+    "max_risk_per_trade": 0.015,
+    "max_daily_drawdown": 0.05,
+    "max_total_drawdown": 0.10,
+    "leverage": 30
+  },
+  "strategy": {
+    "name": "turtle_trader",
+    "swing_mode": true,
+    "entry_period": 40,
+    "exit_period": 20,
+    "atr_period": 20,
+    "atr_multiplier": 2.5
+  },
+  "logging": {
+    "log_file": "logs/trading_log.csv",
+    "log_level": "INFO"
+  },
+  "output": {
+    "data_dir": "data"
+  }
+}

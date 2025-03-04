@@ -23,7 +23,7 @@ def main():
     print("Dit programma controleert of je trading prestaties voldoen aan de FTMO regels.")
 
     # Controleer of logbestand bestaat
-    log_file = os.path.join('logs', 'trading_journal.csv')
+    log_file = os.path.join('../logs', 'trading_journal.csv')
     if not os.path.exists(log_file):
         print(f"\nError: Log bestand niet gevonden: {log_file}")
         print("Voer eerst de TurtleTrader bot uit om trading data te genereren.")

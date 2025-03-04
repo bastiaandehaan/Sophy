@@ -1,11 +1,10 @@
 import pandas as pd
-import numpy as np
 import MetaTrader5 as mt5
 
 
 class TurtleStrategy:
     """Implementatie van de Turtle Trading strategie geoptimaliseerd voor FTMO Swing"""
-    from modules.strategy.base import BaseStrategy
+    from src.strategy.base_strategy import BaseStrategy
 
     class TurtleStrategy(BaseStrategy):
         """Implementatie van de Turtle Trading strategie geoptimaliseerd voor FTMO Swing"""
