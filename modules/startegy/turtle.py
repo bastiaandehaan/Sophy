@@ -5,7 +5,7 @@ import MetaTrader5 as mt5
 
 class TurtleStrategy:
     """Implementatie van de Turtle Trading strategie geoptimaliseerd voor FTMO Swing"""
-    from modules.strategies.base_strategy import BaseStrategy
+    from modules.startegy.base import BaseStrategy
 
     class TurtleStrategy(BaseStrategy):
         """Implementatie van de Turtle Trading strategie geoptimaliseerd voor FTMO Swing"""
