@@ -1,6 +1,6 @@
-# sophy/strategies/base_strategy.py
+# src/strategy/base_strategy.py
 from abc import ABC, abstractmethod
-from typing import Dict
+from typing import Dict, Any, List
 
 
 class Strategy(ABC):
@@ -30,7 +30,7 @@ class Strategy(ABC):
         self.name = "Base Strategy"
 
     @abstractmethod
-    def process_symbol(self, symbol: str) -> Dict:
+    def process_symbol(self, symbol: str) -> Dict[str, Any]:
         """
         Verwerk een symbool volgens de strategie regels
 
@@ -46,13 +46,13 @@ class Strategy(ABC):
         pass
 
     @abstractmethod
-    def calculate_indicators(self, data: Dict) -> Dict:
+    def calculate_indicators(self, data: Any) -> Dict[str, Any]:
         """
         Bereken de technische indicatoren voor de strategie
 
         Parameters:
         -----------
-        data : Dict
+        data : Any
             Prijsgegevens en andere input
 
         Returns:
@@ -71,6 +71,12 @@ class Strategy(ABC):
         """
         return self.name
 
+    def get_open_positions(self) -> Dict[str, List]:
+        """
+        Haal alle open posities op
 
-class BaseStrategy:
-    pass
+        Returns:
+        --------
+        Dict : Dictionary met open posities per symbool
+        """
+        return {}

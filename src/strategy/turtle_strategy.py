@@ -1,500 +1,390 @@
-import MetaTrader5 as mt5
+from datetime import datetime
+from typing import Dict, List, Any, Optional
 import pandas as pd
+import MetaTrader5 as mt5
+import copy
 
+# Voorbeeld imports (pas aan naar je daadwerkelijke module-structuur)
+from src.connector.mt5_connector import MT5Connector  # Placeholder
+from src.risk.risk_manager import RiskManager  # Placeholder
+from src.utils.logger import Logger  # Placeholder
+from src.strategy.base_strategy import Strategy
 
-class TurtleStrategy:
-    """Implementatie van de Turtle Trading strategie geoptimaliseerd voor FTMO Swing"""
-    from src.strategy.base_strategy import BaseStrategy
+class TurtleStrategy(Strategy):
+    """Implementatie van de Turtle Trading strategie geoptimaliseerd voor FTMO met ondersteuning voor swing modus."""
 
-    class TurtleStrategy(BaseStrategy):
-        """Implementatie van de Turtle Trading strategie geoptimaliseerd voor FTMO Swing"""
-    def __init__(self, connector, risk_manager, logger, config):
+    def __init__(self, connector: MT5Connector, risk_manager: RiskManager, logger: Logger, config: dict):
         """
-        Initialiseer de Turtle strategie
+        Initialiseer de Turtle strategie.
 
         Parameters:
         -----------
         connector : MT5Connector
-            Verbinding met MetaTrader 5
+            Verbinding met MetaTrader 5.
         risk_manager : RiskManager
-            Risicobeheer component
+            Risicobeheer component.
         logger : Logger
-            Component voor logging
+            Component voor logging.
         config : dict
-            Strategie configuratie
+            Configuratie voor de strategie, inclusief mt5- en strategy-secties.
         """
-        self.connector = connector
-        self.risk_manager = risk_manager
-        self.logger = logger
-        self.config = config
+        super().__init__(connector, risk_manager, logger, config)
+        self.name = "Turtle Trading Strategy"
+        self.position_initial_volumes: Dict[int, float] = {}  # Ticket -> initiële volume
+        self.strategy_config = config.get('strategy', {})
+        self.swing_mode = self.strategy_config.get('swing_mode', False)
 
-        # Dictionary om initiële volumes bij te houden voor gedeeltelijke winstneming
-        self.position_initial_volumes = {}
-
-        # Bepaal of we in swing modus opereren
-        self.swing_mode = self.config['mt5'].get('swing_mode', False)
-
-        # Parameters voor Swing modus
+        # Stel parameters in gebaseerd op modus
         if self.swing_mode:
-            self.entry_period = 40  # Langere periode voor swing trading
-            self.exit_period = 20  # Langere exit periode
-            self.atr_period = 20
-            self.atr_multiplier = 2.5  # Ruimere stop voor swing trading
-            print("Strategie geïnitialiseerd in Swing modus met aangepaste parameters")
+            self.entry_period = self.strategy_config.get('entry_period', 40)
+            self.exit_period = self.strategy_config.get('exit_period', 20)
+            self.atr_period = self.strategy_config.get('atr_period', 20)
+            self.atr_multiplier = self.strategy_config.get('atr_multiplier', 2.5)
+            self.logger.log_info(
+                "Strategie geïnitialiseerd in Swing modus met parameters: "
+                f"entry_period={self.entry_period}, exit_period={self.exit_period}, "
+                f"atr_period={self.atr_period}, atr_multiplier={self.atr_multiplier}"
+            )
         else:
-            self.entry_period = 20  # Standaard Turtle parameter
-            self.exit_period = 10  # Standaard Turtle parameter
-            self.atr_period = 20
-            self.atr_multiplier = 2.0
-            print("Strategie geïnitialiseerd in standaard modus")
+            self.entry_period = self.strategy_config.get('entry_period', 20)
+            self.exit_period = self.strategy_config.get('exit_period', 10)
+            self.atr_period = self.strategy_config.get('atr_period', 20)
+            self.atr_multiplier = self.strategy_config.get('atr_multiplier', 2.0)
+            self.logger.log_info(
+                "Strategie geïnitialiseerd in standaard modus met parameters: "
+                f"entry_period={self.entry_period}, exit_period={self.exit_period}, "
+                f"atr_period={self.atr_period}, atr_multiplier={self.atr_multiplier}"
+            )
 
-    def calculate_atr(self, df, period=None):
+        self.use_trend_filter = self.strategy_config.get('use_trend_filter', True)
+
+    def calculate_indicators(self, df: pd.DataFrame) -> Dict[str, Any]:
         """
-        Bereken Average True Range (ATR)
+        Bereken technische indicatoren voor de Turtle strategie.
 
         Parameters:
         -----------
-        df : pandas.DataFrame
-            DataFrame met prijsdata (moet 'high', 'low', 'close' columns bevatten)
-        period : int, optional
-            ATR periode
+        df : pd.DataFrame
+            DataFrame met prijsdata (high, low, close, tick_volume).
 
         Returns:
         --------
-        pandas.Series
-            ATR waarden
+        Dict[str, Any]
+            Berekende indicatoren voor de laatste rij.
         """
-        if period is None:
-            period = self.atr_period
+        if df.empty or 'high' not in df.columns or 'low' not in df.columns or 'close' not in df.columns:
+            return {}
 
-        high = df['high']
-        low = df['low']
-        close = df['close'].shift(1)
-
-        tr1 = high - low
-        tr2 = abs(high - close)
-        tr3 = abs(low - close)
-
-        tr = pd.DataFrame({'tr1': tr1, 'tr2': tr2, 'tr3': tr3}).max(axis=1)
-        atr = tr.rolling(window=period).mean()
-
-        return atr
-
-    def calculate_trend_strength(self, df):
-        """
-        Bereken trendsterkte gebaseerd op de afstand van de prijs tot de EMA-50
-        en de hoek van de EMA
-
-        Parameters:
-        -----------
-        df : pandas.DataFrame
-            DataFrame met prijsdata
-
-        Returns:
-        --------
-        float
-            Trendsterkte-indicator (schaal 0-1)
-        """
-        if 'ema_50' not in df.columns or len(df) < 10:
-            return 0
-
-        # Haal de meest recente waarden op
-        latest_close = df['close'].iloc[-1]
-        latest_ema = df['ema_50'].iloc[-1]
-
-        # Bereken EMA-hoek (snelheid van verandering)
-        ema_slope = (df['ema_50'].iloc[-1] - df['ema_50'].iloc[-10]) / df['ema_50'].iloc[-10]
-
-        # Normaliseer de afstand met ATR
-        latest_atr = df['atr'].iloc[-1] if 'atr' in df.columns and df['atr'].iloc[-1] > 0 else latest_close * 0.01
-        distance = (latest_close - latest_ema) / latest_atr
-
-        # Combineer afstand en hoek voor trendsterkte
-        # Afstand is 70% van de score, hoek is 30%
-        distance_score = min(1.0, max(0, distance / 3))
-        slope_score = min(1.0, max(0, ema_slope * 20))  # Schaal hoek naar 0-1
-
-        strength = (distance_score * 0.7) + (slope_score * 0.3)
-
-        return min(1.0, strength)  # Begrens op maximum 1.0
-
-    def calculate_market_volatility(self, df):
-        """
-        Bepaal of de markt zich in een hoge volatiliteitsperiode bevindt
-
-        Parameters:
-        -----------
-        df : pandas.DataFrame
-            DataFrame met prijsdata
-
-        Returns:
-        --------
-        bool
-            True als volatiliteit hoog is, anders False
-        """
-        if 'atr' not in df.columns or len(df) < 20:
-            return False
-
-        # Bereken gemiddelde ATR over de laatste 20 periodes
-        avg_atr_20 = df['atr'].rolling(window=20).mean().iloc[-1]
-
-        # Vergelijk huidige ATR met gemiddelde
-        current_atr = df['atr'].iloc[-1]
-
-        # Als huidige ATR meer dan 30% boven gemiddelde is, beschouwen we het als hoge volatiliteit
-        high_volatility = current_atr > (avg_atr_20 * 1.3)
-
-        return high_volatility
-
-    def process_symbol(self, symbol):
-        """
-        Verwerk een symbool volgens de verbeterde Turtle strategie
-
-        Parameters:
-        -----------
-        symbol : str
-            Het te verwerken symbool
-        """
-        # Controleer of de dagelijkse risicolimiet is bereikt
-        if not self.risk_manager.can_trade():
-            self.logger.log_info(f"Dagelijkse risico-limiet bereikt, geen trades voor {symbol}")
-            return
-
-        # Haal configuratie timeframe op en zet om naar MT5 constante
-        timeframe_str = self.config['mt5'].get('timeframe', 'H4')
-        timeframe = self.connector.get_timeframe_constant(timeframe_str)
-
-        # Bepaal aantal bars op basis van timeframe (meer bars voor kortere timeframes)
-        if timeframe == mt5.TIMEFRAME_H4:
-            bars_needed = 150
-        elif timeframe == mt5.TIMEFRAME_H1:
-            bars_needed = 240
-        else:
-            bars_needed = 100
-
-        # Haal historische data op
-        df = self.connector.get_historical_data(symbol, timeframe, bars_needed)
-        if df.empty:
-            self.logger.log_info(f"Geen historische data beschikbaar voor {symbol}")
-            return
-
-        # Bereken indicatoren
+        # Bereken ATR
         df['atr'] = self.calculate_atr(df)
+
+        # Bereken Donchian kanalen
         df['high_entry'] = df['high'].rolling(window=self.entry_period).max()
+        df['low_entry'] = df['low'].rolling(window=self.entry_period).min()
+        df['high_exit'] = df['high'].rolling(window=self.exit_period).max()
         df['low_exit'] = df['low'].rolling(window=self.exit_period).min()
 
         # Voeg volume-indicator toe
         df['vol_avg_50'] = df['tick_volume'].rolling(window=50).mean()
-        df['vol_ratio'] = df['tick_volume'] / df['vol_avg_50']
+        df['vol_ratio'] = df['tick_volume'] / df['vol_avg_50'].replace(0, 1)  # Vermijd deling door 0
 
-        # Voeg trendfilter en trendsterkte toe
+        # Trendfilters
         if len(df) >= 50:
             df['ema_50'] = df['close'].ewm(span=50, adjust=False).mean()
-            df['ema_200'] = df['close'].ewm(span=200, adjust=False).mean() if len(df) >= 200 else df['close']
-            trend_bullish = df['close'].iloc[-1] > df['ema_50'].iloc[-1]
-            strong_trend = df['ema_50'].iloc[-1] > df['ema_200'].iloc[-1] if len(df) >= 200 else True
-            trend_strength = self.calculate_trend_strength(df)
-        else:
-            trend_bullish = True
-            strong_trend = True
-            trend_strength = 0
+        if len(df) >= 200:
+            df['ema_200'] = df['close'].ewm(span=200, adjust=False).mean()
 
-        # Bepaal volatiliteit
-        high_volatility = self.calculate_market_volatility(df)
+        if 'ema_50' in df.columns:
+            df['trend_bullish'] = df['close'] > df['ema_50']
+        if 'ema_50' in df.columns and 'ema_200' in df.columns:
+            df['strong_trend'] = df['ema_50'] > df['ema_200']
+        if 'ema_50' in df.columns:
+            df['trend_strength'] = self.calculate_trend_strength(df)
+        if 'atr' in df.columns:
+            df['high_volatility'] = self.calculate_market_volatility(df)
 
-        # Haal huidige prijs en waarden op
+        # Retourneer laatste waarden
+        return {
+            'atr': df['atr'].iloc[-1] if 'atr' in df else None,
+            'high_entry': df['high_entry'].iloc[-2] if 'high_entry' in df else None,
+            'low_entry': df['low_entry'].iloc[-2] if 'low_entry' in df else None,
+            'high_exit': df['high_exit'].iloc[-2] if 'high_exit' in df else None,
+            'low_exit': df['low_exit'].iloc[-2] if 'low_exit' in df else None,
+            'trend_bullish': df['trend_bullish'].iloc[-1] if 'trend_bullish' in df else None,
+            'strong_trend': df['strong_trend'].iloc[-1] if 'strong_trend' in df else None,
+            'trend_strength': df['trend_strength'].iloc[-1] if 'trend_strength' in df else None,
+            'high_volatility': df['high_volatility'].iloc[-1] if 'high_volatility' in df else None,
+            'vol_ratio': df['vol_ratio'].iloc[-1] if 'vol_ratio' in df else None
+        }
+
+    def calculate_atr(self, df: pd.DataFrame) -> pd.Series:
+        """
+        Bereken de Average True Range (ATR).
+
+        Parameters:
+        -----------
+        df : pd.DataFrame
+            DataFrame met prijsdata (high, low, close).
+
+        Returns:
+        --------
+        pd.Series
+            ATR waarden.
+        """
+        if 'close' not in df.columns or df['close'].isna().all():
+            return pd.Series([0] * len(df), index=df.index)
+        high = df['high']
+        low = df['low']
+        close = df['close'].shift(1).fillna(method='bfill')
+
+        tr1 = high - low
+        tr2 = abs(high - close)
+        tr3 = abs(low - close)
+        tr = pd.DataFrame({'tr1': tr1, 'tr2': tr2, 'tr3': tr3}).max(axis=1)
+        return tr.rolling(window=self.atr_period, min_periods=1).mean()
+
+    def calculate_trend_strength(self, df: pd.DataFrame) -> float:
+        """
+        Bereken trendsterkte gebaseerd op EMA-afstand en -hoek.
+
+        Parameters:
+        -----------
+        df : pd.DataFrame
+            DataFrame met prijsdata.
+
+        Returns:
+        --------
+        float
+            Trendsterkte (0-1).
+        """
+        if 'ema_50' not in df.columns or len(df) < 10:
+            return 0.0
+        latest_close = df['close'].iloc[-1]
+        latest_ema = df['ema_50'].iloc[-1]
+        ema_slope = (df['ema_50'].iloc[-1] - df['ema_50'].iloc[-10]) / df['ema_50'].iloc[-10] if df['ema_50'].iloc[-10] != 0 else 0
+        latest_atr = df['atr'].iloc[-1] if 'atr' in df and not pd.isna(df['atr'].iloc[-1]) else latest_close * 0.01
+        distance = (latest_close - latest_ema) / latest_atr
+        distance_score = min(1.0, max(0.0, distance / 3))
+        slope_score = min(1.0, max(0.0, ema_slope * 20))
+        return min(1.0, max(0.0, (distance_score * 0.7) + (slope_score * 0.3)))
+
+    def calculate_market_volatility(self, df: pd.DataFrame) -> bool:
+        """
+        Bepaal of de markt in een hoge volatiliteitsperiode zit.
+
+        Parameters:
+        -----------
+        df : pd.DataFrame
+            DataFrame met prijsdata.
+
+        Returns:
+        --------
+        bool
+            True als volatiliteit hoog is.
+        """
+        if 'atr' not in df.columns or len(df) < 20:
+            return False
+        avg_atr = df['atr'].iloc[-20:].mean()
+        if pd.isna(avg_atr) or avg_atr == 0:
+            return False
+        current_atr = df['atr'].iloc[-1]
+        return current_atr > (avg_atr * 1.3) if not pd.isna(current_atr) else False
+
+    def process_symbol(self, symbol: str) -> Dict[str, Any]:
+        """
+        Verwerk een symbool volgens de Turtle strategie.
+
+        Parameters:
+        -----------
+        symbol : str
+            Het te verwerken symbool.
+
+        Returns:
+        --------
+        Dict[str, Any]
+            Resultaten inclusief signaal en actie.
+        """
+        result = {'signal': None, 'action': None}
+        if not self.risk_manager.can_trade():
+            self.logger.log_info(f"Dagelijkse risico-limiet bereikt, geen trades voor {symbol}")
+            return result
+
+        timeframe_str = self.config.get('mt5', {}).get('timeframe', 'H4')
+        bars_needed = 240 if timeframe_str == 'H1' else 150 if timeframe_str == 'H4' else 200
+        df = self.connector.get_historical_data(symbol, timeframe_str, bars_needed)
+        if df.empty:
+            self.logger.log_info(f"Geen historische data beschikbaar voor {symbol}")
+            return result
+
+        indicators = self.calculate_indicators(df)
+        if not indicators:
+            self.logger.log_info(f"Kon indicatoren niet berekenen voor {symbol}")
+            return result
+
         tick = self.connector.get_symbol_tick(symbol)
         if tick is None:
             self.logger.log_info(f"Kon geen tick informatie krijgen voor {symbol}")
-            return
+            return result
 
         current_price = tick.ask
-        last_high_entry = df['high_entry'].iloc[-2]  # Gebruik vorige candle
-        last_low_exit = df['low_exit'].iloc[-2]
-        current_atr = df['atr'].iloc[-1]
+        last_high_entry = indicators.get('high_entry')
+        last_low_exit = indicators.get('low_exit')
+        current_atr = indicators.get('atr')
+        if None in (current_atr, last_high_entry, last_low_exit):
+            self.logger.log_info(f"Ontbrekende indicator waarden voor {symbol}")
+            return result
 
-        # **Verbeterde entry-criteria voor FTMO Swing**
-        # 1. Prijs moet boven breakout-niveau liggen
-        # 2. Volume moet hoger zijn dan gemiddeld
-        # 3. Trend moet bullish zijn
-        # 4. Voor Swing: Extra bevestiging van sterke trend vereist
+        trend_bullish = indicators.get('trend_bullish', True)
+        strong_trend = indicators.get('strong_trend', True)
+        trend_strength = indicators.get('trend_strength', 0.5)
+        high_volatility = indicators.get('high_volatility', False)
+        volume_ratio = indicators.get('vol_ratio', 1.0)
 
         price_breakout = current_price > last_high_entry * 1.001
-        volume_filter = df['vol_ratio'].iloc[-1] > 1.1
+        volume_filter = volume_ratio > 1.1 if not pd.isna(volume_ratio) else True
+        entry_conditions = price_breakout and current_atr > 0 and volume_filter
 
-        entry_conditions = (
-                price_breakout and
-                current_atr > 0 and
-                trend_bullish and
-                volume_filter
-        )
-
-        # Voeg extra voorwaarden toe voor Swing modus
+        if self.use_trend_filter:
+            entry_conditions = entry_conditions and trend_bullish
         if self.swing_mode:
-            # In Swing modus: alleen traden als er een sterke trend is en volatiliteit acceptabel
             entry_conditions = entry_conditions and strong_trend and not high_volatility
 
         if entry_conditions:
             self.logger.log_info(f"Breakout gedetecteerd voor {symbol} op {current_price}")
+            result['signal'] = 'ENTRY'
+            result['action'] = 'BUY'
 
-            # Bereken stop loss met variabele ATR multiplier
-            # Bij swing trading gebruiken we een ruimere stop
-            sl_multiplier = self.atr_multiplier
-            if high_volatility:
-                sl_multiplier += 0.5  # Ruimere stop bij hoge volatiliteit
-
+            sl_multiplier = self.atr_multiplier + 0.5 if high_volatility else self.atr_multiplier
             stop_loss = current_price - (sl_multiplier * current_atr)
 
-            # Bereken positiegrootte op basis van risicomanagement
             account_info = self.connector.get_account_info()
-            account_balance = account_info.get('balance', self.config['mt5']['account_balance'])
+            account_balance = account_info.get('balance', self.config.get('mt5', {}).get('account_balance', 100000))
+            lot_size = self.risk_manager.calculate_position_size(symbol, current_price, stop_loss, account_balance, trend_strength)
 
-            lot_size = self.risk_manager.calculate_position_size(
-                symbol=symbol,
-                entry_price=current_price,
-                stop_loss=stop_loss,
-                account_balance=account_balance,
-                trend_strength=trend_strength
-            )
-
-            # Controleer of positiegrootte voldoet aan risicolimieten
             if not self.risk_manager.check_trade_risk(symbol, lot_size, current_price, stop_loss):
                 self.logger.log_info(f"Trade overschrijdt risicolimiet voor {symbol}")
-                return
+                return result
 
-            # Plaats order
-            ticket = self.connector.place_order(
-                "BUY",
-                symbol,
-                lot_size,
-                stop_loss,
-                0,  # Geen vaste take profit voor Turtle strategie
-                comment=f"FTMO {'Swing' if self.swing_mode else 'Turtle'}"
-            )
-
-            if ticket:
-                # Sla initiële volume op voor gedeeltelijke winstneming
-                self.position_initial_volumes[ticket] = lot_size
-                self.logger.log_trade(
-                    symbol=symbol,
-                    action="BUY",
-                    price=current_price,
-                    volume=lot_size,
-                    sl=stop_loss,
-                    tp=0,
-                    comment=f"{'Swing' if self.swing_mode else 'Turtle'} Entry (TS:{trend_strength:.2f}, Leverage:1:{self.risk_manager.leverage})"
+            try:
+                ticket = self.connector.place_order(
+                    "BUY", symbol, lot_size, stop_loss, 0,
+                    comment=f"FTMO {'Swing' if self.swing_mode else 'Turtle'}"
                 )
+                if ticket:
+                    self.position_initial_volumes[ticket] = lot_size
+                    self.logger.log_trade(
+                        symbol, "BUY", current_price, lot_size, stop_loss, 0,
+                        f"{'Swing' if self.swing_mode else 'Turtle'} Entry (TS:{trend_strength:.2f})",
+                        self.risk_manager.leverage
+                    )
+                    result['ticket'] = ticket
+                    result['volume'] = lot_size
+                    result['stop_loss'] = stop_loss
+            except Exception as e:
+                self.logger.log_error(f"Fout bij plaatsen order voor {symbol}: {e}")
+                return result
 
-        # Beheer bestaande posities (exit en gedeeltelijke winstneming)
-        open_positions = self.connector.get_open_positions(symbol)
-        if open_positions:
-            for position in open_positions:
-                position_age_days = (datetime.now() - pd.to_datetime(position.time, unit='s')).days
+        self._manage_positions(symbol, current_price, last_low_exit, current_atr)
+        return result
 
-                if position.type == mt5.POSITION_TYPE_BUY:
-                    entry_price = position.price_open
-                    profit_atr = 1.5 if self.swing_mode else 1.0  # Hogere winstdoelen voor swing trading
-                    profit_target_1 = entry_price + (profit_atr * current_atr)  # 1.5x ATR voor eerste winstneming
-                    profit_target_2 = entry_price + (profit_atr * 2 * current_atr)  # 3x ATR voor tweede winstneming
-
-                    # Controleer of positie lang genoeg open is voor Swing trading
-                    min_hold_time = 1  # minimaal 1 dag voor normale trades
-                    if self.swing_mode:
-                        min_hold_time = 2  # minimaal 2 dagen voor swing trades
-
-                    time_condition_met = position_age_days >= min_hold_time
-
-                    # Gedeeltelijke winstneming bij eerste profit target (40%)
-                    if (time_condition_met and
-                            current_price > profit_target_1 and
-                            position.ticket in self.position_initial_volumes):
-
-                        initial_volume = self.position_initial_volumes[position.ticket]
-                        partial_volume = round(initial_volume * 0.4, 2)  # Neem 40% winst
-
-                        if position.volume >= partial_volume and partial_volume >= 0.01:
-                            self.logger.log_info(f"Gedeeltelijke winstneming (40%) voor {symbol} op {current_price}")
-
-                            # Sluit deel van de positie
-                            partial_result = self.connector.place_order(
-                                "SELL",
-                                symbol,
-                                partial_volume,
-                                0,
-                                0,
-                                comment=f"Partial Profit 40% - ticket:{position.ticket}"
-                            )
-
-                            if partial_result:
-                                self.logger.log_trade(
-                                    symbol=symbol,
-                                    action="SELL",
-                                    price=current_price,
-                                    volume=partial_volume,
-                                    sl=0,
-                                    tp=0,
-                                    comment="Partial Profit 40%"
-                                )
-
-                                # Verplaats stop loss naar break-even na eerste winstneming
-                                remaining_volume = position.volume - partial_volume
-                                if remaining_volume >= 0.01:
-                                    self.connector.place_order(
-                                        "SELL",
-                                        symbol,
-                                        remaining_volume,
-                                        0,
-                                        0,
-                                        comment=f"Close and reopen at breakeven - ticket:{position.ticket}"
-                                    )
-
-                                    # Heropen positie met break-even stop loss
-                                    new_ticket = self.connector.place_order(
-                                        "BUY",
-                                        symbol,
-                                        remaining_volume,
-                                        entry_price,  # Break-even stop loss
-                                        0,
-                                        comment=f"Reopen with breakeven SL - from:{position.ticket}"
-                                    )
-
-                                    if new_ticket:
-                                        self.position_initial_volumes[new_ticket] = remaining_volume
-
-                    # Gedeeltelijke winstneming bij tweede profit target (30%)
-                    elif (time_condition_met and
-                          current_price > profit_target_2 and
-                          position.ticket in self.position_initial_volumes):
-
-                        initial_volume = self.position_initial_volumes[position.ticket]
-                        remaining_pct = 0.6  # Na eerste winstneming van 40% is 60% over
-                        partial_volume = round(initial_volume * remaining_pct * 0.5,
-                                               2)  # Neem helft van het resterende deel
-
-                        if position.volume >= partial_volume and partial_volume >= 0.01:
-                            self.logger.log_info(f"Gedeeltelijke winstneming (30%) voor {symbol} op {current_price}")
-
-                            # Sluit deel van de positie
-                            partial_result = self.connector.place_order(
-                                "SELL",
-                                symbol,
-                                partial_volume,
-                                0,
-                                0,
-                                comment=f"Partial Profit 30% - ticket:{position.ticket}"
-                            )
-
-                            if partial_result:
-                                self.logger.log_trade(
-                                    symbol=symbol,
-                                    action="SELL",
-                                    price=current_price,
-                                    volume=partial_volume,
-                                    sl=0,
-                                    tp=0,
-                                    comment="Partial Profit 30%"
-                                )
-
-                                # Verhoog stop loss naar 50% van de winst voor het resterende deel
-                                remaining_volume = position.volume - partial_volume
-                                if remaining_volume >= 0.01:
-                                    new_sl = entry_price + ((current_price - entry_price) * 0.5)
-
-                                    self.connector.place_order(
-                                        "SELL",
-                                        symbol,
-                                        remaining_volume,
-                                        0,
-                                        0,
-                                        comment=f"Close and reopen with trailing SL - ticket:{position.ticket}"
-                                    )
-
-                                    # Heropen positie met nieuwe stop loss
-                                    new_ticket = self.connector.place_order(
-                                        "BUY",
-                                        symbol,
-                                        remaining_volume,
-                                        new_sl,
-                                        0,
-                                        comment=f"Reopen with trailing SL - from:{position.ticket}"
-                                    )
-
-                                    if new_ticket:
-                                        self.position_initial_volumes[new_ticket] = remaining_volume
-
-                    # Normale exit: prijs daalt onder de exit-periode low
-                    elif current_price < last_low_exit:
-                        self.logger.log_info(f"Exit signaal voor {symbol} op {current_price}")
-
-                        # Sluit volledige positie
-                        close_result = self.connector.place_order(
-                            "SELL",
-                            symbol,
-                            position.volume,
-                            0,
-                            0,
-                            comment=f"{'Swing' if self.swing_mode else 'Turtle'} Exit - ticket:{position.ticket}"
-                        )
-
-                        if close_result:
-                            self.logger.log_trade(
-                                symbol=symbol,
-                                action="SELL",
-                                price=current_price,
-                                volume=position.volume,
-                                sl=0,
-                                tp=0,
-                                comment=f"{'Swing' if self.swing_mode else 'Turtle'} System Exit"
-                            )
-
-                            # Verwijder positie uit dictionary als volledig gesloten
-                            if position.ticket in self.position_initial_volumes:
-                                del self.position_initial_volumes[position.ticket]
-
-    def get_open_positions(self):
+    def _manage_positions(self, symbol: str, current_price: float, last_low_exit: float, current_atr: float) -> None:
         """
-        Haal alle open posities op
+        Beheer bestaande posities voor een symbool.
+
+        Parameters:
+        -----------
+        symbol : str
+            Trading symbool.
+        current_price : float
+            Huidige marktprijs.
+        last_low_exit : float
+            Laatste Donchian kanaal low exit.
+        current_atr : float
+            Huidige ATR waarde.
+        """
+        open_positions = self.connector.get_open_positions(symbol)
+        if not open_positions:
+            return
+
+        for position in open_positions:
+            position_age_days = (datetime.now().timestamp() - position.time) / (60 * 60 * 24)
+            if position.type != mt5.POSITION_TYPE_BUY:
+                continue
+
+            entry_price = position.price_open
+            profit_atr = 1.5 if self.swing_mode else 1.0
+            profit_target_1 = entry_price + (profit_atr * current_atr)
+            profit_target_2 = entry_price + (profit_atr * 2 * current_atr)
+            min_hold_time = 2 if self.swing_mode else 1
+            time_condition_met = position_age_days >= min_hold_time
+
+            if (time_condition_met and current_price > profit_target_1 and position.ticket in self.position_initial_volumes):
+                initial_volume = self.position_initial_volumes[position.ticket]
+                partial_volume = round(initial_volume * 0.4, 2)
+                if position.volume >= partial_volume and partial_volume >= 0.01:
+                    self.logger.log_info(f"Gedeeltelijke winstneming (40%) voor {symbol} op {current_price}")
+                    try:
+                        partial_result = self.connector.place_order(
+                            "SELL", symbol, partial_volume, 0, 0, f"Partial Profit 40% - ticket:{position.ticket}"
+                        )
+                        if partial_result:
+                            self.logger.log_trade(symbol, "SELL", current_price, partial_volume, 0, 0, "Partial Profit 40%")
+                            remaining_volume = position.volume - partial_volume
+                            if remaining_volume >= 0.01:
+                                self.connector.modify_position(position.ticket, stop_loss=entry_price, take_profit=0)
+                                self.position_initial_volumes[position.ticket] = remaining_volume
+                    except Exception as e:
+                        self.logger.log_error(f"Fout bij gedeeltelijke winstneming voor {symbol}: {e}")
+
+            elif (time_condition_met and current_price > profit_target_2 and position.ticket in self.position_initial_volumes):
+                initial_volume = self.position_initial_volumes[position.ticket]
+                remaining_pct = 0.6
+                partial_volume = round(initial_volume * remaining_pct * 0.5, 2)
+                if position.volume >= partial_volume and partial_volume >= 0.01:
+                    self.logger.log_info(f"Gedeeltelijke winstneming (30%) voor {symbol} op {current_price}")
+                    try:
+                        partial_result = self.connector.place_order(
+                            "SELL", symbol, partial_volume, 0, 0, f"Partial Profit 30% - ticket:{position.ticket}"
+                        )
+                        if partial_result:
+                            self.logger.log_trade(symbol, "SELL", current_price, partial_volume, 0, 0, "Partial Profit 30%")
+                            remaining_volume = position.volume - partial_volume
+                            if remaining_volume >= 0.01:
+                                new_sl = entry_price + ((current_price - entry_price) * 0.5)
+                                self.connector.modify_position(position.ticket, stop_loss=new_sl, take_profit=0)
+                                self.position_initial_volumes[position.ticket] = remaining_volume
+                    except Exception as e:
+                        self.logger.log_error(f"Fout bij tweede winstneming voor {symbol}: {e}")
+
+            elif current_price < last_low_exit:
+                self.logger.log_info(f"Exit signaal voor {symbol} op {current_price}")
+                try:
+                    close_result = self.connector.place_order(
+                        "SELL", symbol, position.volume, 0, 0, f"{'Swing' if self.swing_mode else 'Turtle'} Exit - ticket:{position.ticket}"
+                    )
+                    if close_result:
+                        self.logger.log_trade(
+                            symbol, "SELL", current_price, position.volume, 0, 0,
+                            f"{'Swing' if self.swing_mode else 'Turtle'} System Exit"
+                        )
+                        if position.ticket in self.position_initial_volumes:
+                            del self.position_initial_volumes[position.ticket]
+                except Exception as e:
+                    self.logger.log_error(f"Fout bij sluiten positie voor {symbol}: {e}")
+
+    def get_open_positions(self) -> Dict[str, List]:
+        """
+        Haal alle open posities op per symbool.
 
         Returns:
         --------
-        dict
-            Dictionary met open posities per symbool
+        Dict[str, List]
+            Dictionary met open posities per symbool.
         """
         result = {}
-        for symbol in self.config['mt5']['symbols']:
+        symbols = self.config.get('mt5', {}).get('symbols', [])
+        for symbol in symbols:
             positions = self.connector.get_open_positions(symbol)
             if positions:
                 result[symbol] = positions
         return result
-
-    def check_daily_limit(self):
-        """
-        Controleer of de dagelijkse winstdoelen of verlieslimiet zijn bereikt
-
-        Returns:
-        --------
-        tuple
-            (stop_trading, reason)
-            stop_trading: bool - True als het handelen gestopt moet worden
-            reason: str - Reden voor het stoppen (indien van toepassing)
-        """
-        account_info = self.connector.get_account_info()
-
-        # Haal de initiële balans op uit config
-        initial_balance = self.config['mt5'].get('account_balance', 100000)
-
-        # Bereken huidige winst/verlies
-        current_balance = account_info.get('balance', initial_balance)
-        daily_pnl_pct = (current_balance - initial_balance) / initial_balance
-
-        # FTMO-regels: stop bij 10% winst of 5% dagelijks verlies
-        profit_target = 0.10  # 10% winstdoel
-        daily_loss_limit = -0.05  # 5% dagelijkse verlieslimiet
-
-        if daily_pnl_pct >= profit_target:
-            return True, f"Dagelijks winstdoel bereikt: {daily_pnl_pct:.2%}"
-
-        if daily_pnl_pct <= daily_loss_limit:
-            return True, f"Dagelijkse verlieslimiet bereikt: {daily_pnl_pct:.2%}"
-
-        return False, None
