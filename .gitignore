@@ -1,16 +1,29 @@
-# Ignore Python virtuele omgeving
+# Ignore Python virtual environment
 .venv/
+env/  # Voor het geval je een andere naam voor je virtuele omgeving gebruikt
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
 
-# Ignore PyCharm-specifieke bestanden
+# Ignore PyCharm-specific files
 .idea/
 
-# Ignore log- en data-bestanden die lokaal gegenereerd worden (optioneel)
+# Ignore log and data files generated locally
 logs/
 data/
 *.log
 *.csv
 *.png
-*.py[cod]
-*$py.class
+
+# Ignore other temporary or generated files
+*.tmp
+*.bak
+*.swp
+
+# Ignore Python notebooks and their checkpoints (if used)
+*.ipynb_checkpoints/
+
+# Ignore OS-specific files
+.DS_Store  # MacOS
+Thumbs.db  # Windows
