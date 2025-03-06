@@ -1,13 +1,16 @@
 # src/ftmo/ftmo_validator.py
 
-from datetime import datetime, date
-from typing import Dict, Tuple, Optional
 import os
 import re
-import pandas as pd
+from datetime import datetime, date
+from typing import Dict, Tuple, Optional
+
 import matplotlib.pyplot as plt
+import pandas as pd
 import seaborn as sns
+
 from src.utils.logger import Logger  # Importeer de Logger-klasse
+
 
 class FTMOValidator:
     """Klasse om handelsactiviteit te valideren en analyseren volgens FTMO-regels."""
@@ -32,7 +35,8 @@ class FTMOValidator:
         self.logger = logger
         self.initial_balance = config['risk'].get('account_balance', 100000)
         # Haal startdatum uit config of bepaal uit logbestand
-        self.start_date = datetime.strptime(config.get('ftmo', {}).get('start_date', date.today().strftime('%Y-%m-%d')), '%Y-%m-%d').date()
+        self.start_date = datetime.strptime(config.get('ftmo', {}).get('start_date', date.today().strftime('%Y-%m-%d')),
+                                            '%Y-%m-%d').date()
         self.trade_days = set()
         self.log_file = log_file
         self.output_dir = output_dir
@@ -111,6 +115,7 @@ class FTMOValidator:
                     match = re.search(r'Balance:\s*([\d,.]+)', comment)
                     return float(match.group(1).replace(',', '')) if match else None
                 return None
+
             status_df['Balance'] = status_df['Comment'].apply(extract_balance)
 
         if status_df['Balance'].isna().all():
@@ -174,6 +179,7 @@ class FTMOValidator:
                     match = re.search(r'Balance:\s*([\d,.]+)', comment)
                     return float(match.group(1).replace(',', '')) if match else None
                 return None
+
             status_df['Balance'] = status_df['Comment'].apply(extract_balance)
 
         if status_df['Balance'].isna().all():
@@ -189,9 +195,11 @@ class FTMOValidator:
         daily_status['prev_close'] = daily_status['close_balance'].shift(1).fillna(initial_balance)
         daily_status['daily_pnl'] = daily_status['close_balance'] - daily_status['prev_close']
         daily_status['daily_pnl_pct'] = (daily_status['daily_pnl'] / daily_status['prev_close']) * 100
-        daily_status['daily_drawdown'] = (daily_status['min_balance'] - daily_status['prev_close']) / daily_status['prev_close'] * 100
+        daily_status['daily_drawdown'] = (daily_status['min_balance'] - daily_status['prev_close']) / daily_status[
+            'prev_close'] * 100
         daily_status['peak'] = daily_status['close_balance'].cummax()
-        daily_status['drawdown_from_peak'] = (daily_status['close_balance'] - daily_status['peak']) / daily_status['peak'] * 100
+        daily_status['drawdown_from_peak'] = (daily_status['close_balance'] - daily_status['peak']) / daily_status[
+            'peak'] * 100
         max_drawdown = daily_status['drawdown_from_peak'].min()
 
         latest_balance = daily_status['close_balance'].iloc[-1]
@@ -209,15 +217,19 @@ class FTMOValidator:
 
         reasons = []
         if not profit_target_met:
-            reasons.append(f"Winstdoel niet bereikt: {total_pnl_pct:.2f}% (doel: {self.ftmo_rules['profit_target'] * 100}%)")
+            reasons.append(
+                f"Winstdoel niet bereikt: {total_pnl_pct:.2f}% (doel: {self.ftmo_rules['profit_target'] * 100}%)")
         if not daily_loss_compliant:
             worst_day_idx = daily_status['daily_drawdown'].idxmin()
             worst_day = daily_status.iloc[worst_day_idx]
-            reasons.append(f"Dagelijkse verlieslimiet overschreden: {worst_day['daily_drawdown']:.2f}% op {worst_day['Date']}")
+            reasons.append(
+                f"Dagelijkse verlieslimiet overschreden: {worst_day['daily_drawdown']:.2f}% op {worst_day['Date']}")
         if not total_loss_compliant:
-            reasons.append(f"Maximale drawdown overschreden: {max_drawdown:.2f}% (limiet: -{self.ftmo_rules['max_total_loss'] * 100}%)")
+            reasons.append(
+                f"Maximale drawdown overschreden: {max_drawdown:.2f}% (limiet: -{self.ftmo_rules['max_total_loss'] * 100}%)")
         if not trading_days_compliant:
-            reasons.append(f"Onvoldoende handelsdagen: {unique_trading_days} (minimaal: {self.ftmo_rules['min_trading_days']})")
+            reasons.append(
+                f"Onvoldoende handelsdagen: {unique_trading_days} (minimaal: {self.ftmo_rules['min_trading_days']})")
 
         reason = "; ".join(reasons) if reasons else "Voldoet aan alle FTMO-regels"
 
@@ -262,9 +274,12 @@ class FTMOValidator:
         ax1 = fig.add_subplot(gs[0, :])
         ax1.plot(daily_stats['Date'], daily_stats['close_balance'], 'b-', label='Accountbalans')
         ax1.axhline(y=initial_balance, color='gray', linestyle=':', label='Initiële balans')
-        ax1.axhline(y=initial_balance * 1.10, color='green', linestyle='--', label=f"+10% Doel (${initial_balance * 1.10:,.2f})")
-        ax1.axhline(y=initial_balance * 0.95, color='orange', linestyle='--', label=f"-5% Daglimiet (${initial_balance * 0.95:,.2f})")
-        ax1.axhline(y=initial_balance * 0.90, color='red', linestyle='--', label=f"-10% Max Drawdown (${initial_balance * 0.90:,.2f})")
+        ax1.axhline(y=initial_balance * 1.10, color='green', linestyle='--',
+                    label=f"+10% Doel (${initial_balance * 1.10:,.2f})")
+        ax1.axhline(y=initial_balance * 0.95, color='orange', linestyle='--',
+                    label=f"-5% Daglimiet (${initial_balance * 0.95:,.2f})")
+        ax1.axhline(y=initial_balance * 0.90, color='red', linestyle='--',
+                    label=f"-10% Max Drawdown (${initial_balance * 0.90:,.2f})")
         ax1.set_title('FTMO Accountbalans Progressie', fontsize=16)
         ax1.set_ylabel('Balans ($)', fontsize=14)
         ax1.xaxis.set_major_formatter(DateFormatter('%Y-%m-%d'))
@@ -283,7 +298,7 @@ class FTMOValidator:
         # 3. Dagelijkse drawdown
         ax3 = fig.add_subplot(gs[1, 1])
         ax3.fill_between(daily_stats['Date'], daily_stats['daily_drawdown'], 0,
-                        where=(daily_stats['daily_drawdown'] < 0), color='red', alpha=0.3)
+                         where=(daily_stats['daily_drawdown'] < 0), color='red', alpha=0.3)
         ax3.plot(daily_stats['Date'], daily_stats['daily_drawdown'], 'r-', alpha=0.7)
         ax3.axhline(y=-5, color='orange', linestyle='--', label='-5% Daglimiet')
         ax3.set_title('Dagelijkse Drawdown (%)', fontsize=14)
@@ -306,8 +321,12 @@ class FTMOValidator:
         # 5. Win/Loss Ratio
         trade_df = self.load_trade_data()[self.load_trade_data()['Type'] == 'TRADE']
         if not trade_df.empty:
-            profits = trade_df[trade_df['Action'].isin(['SELL', 'BUY']) & (trade_df['Price'].shift(-1) - trade_df['Price'] > 0)]['Price'].count()
-            losses = trade_df[trade_df['Action'].isin(['SELL', 'BUY']) & (trade_df['Price'].shift(-1) - trade_df['Price'] < 0)]['Price'].count()
+            profits = \
+            trade_df[trade_df['Action'].isin(['SELL', 'BUY']) & (trade_df['Price'].shift(-1) - trade_df['Price'] > 0)][
+                'Price'].count()
+            losses = \
+            trade_df[trade_df['Action'].isin(['SELL', 'BUY']) & (trade_df['Price'].shift(-1) - trade_df['Price'] < 0)][
+                'Price'].count()
             win_loss_ratio = profits / losses if losses > 0 else float('inf')
             ax5 = fig.add_subplot(gs[3, :])
             ax5.bar(['Wins', 'Losses'], [profits, losses], color=['green', 'red'])
@@ -395,8 +414,10 @@ class FTMOValidator:
             symbol_stats = {}
             for symbol in trade_df['Symbol'].unique():
                 symbol_df = trade_df[trade_df['Symbol'] == symbol]
-                wins = len(symbol_df[symbol_df['Action'].isin(['SELL', 'BUY']) & (symbol_df['Price'].shift(-1) - symbol_df['Price'] > 0)])
-                losses = len(symbol_df[symbol_df['Action'].isin(['SELL', 'BUY']) & (symbol_df['Price'].shift(-1) - symbol_df['Price'] < 0)])
+                wins = len(symbol_df[symbol_df['Action'].isin(['SELL', 'BUY']) & (
+                            symbol_df['Price'].shift(-1) - symbol_df['Price'] > 0)])
+                losses = len(symbol_df[symbol_df['Action'].isin(['SELL', 'BUY']) & (
+                            symbol_df['Price'].shift(-1) - symbol_df['Price'] < 0)])
                 symbol_stats[symbol] = {
                     'total_trades': len(symbol_df),
                     'wins': wins,

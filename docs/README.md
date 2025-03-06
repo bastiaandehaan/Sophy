@@ -1,6 +1,7 @@
 # Sophy Trading System
 
-Een professioneel algoritmisch trading systeem gebouwd in Python dat de Turtle Trading strategie implementeert via MetaTrader 5, speciaal geoptimaliseerd voor FTMO-accounts.
+Een professioneel algoritmisch trading systeem gebouwd in Python dat de Turtle Trading strategie implementeert via
+MetaTrader 5, speciaal geoptimaliseerd voor FTMO-accounts.
 
 ## Kenmerken
 

@@ -5,7 +5,11 @@
     "password": "YOUR_PASSWORD",
     "server": "FTMO-Demo2",
     "mt5_pathway": "C:\\Program Files\\FTMO MetaTrader 5\\terminal64.exe",
-    "symbols": ["EURUSD", "XAUUSD", "US30"],
+    "symbols": [
+      "EURUSD",
+      "XAUUSD",
+      "US30"
+    ],
     "symbol_mapping": {
       "US30": "US30.cash"
     },

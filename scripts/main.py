@@ -2,10 +2,10 @@
 import time
 from datetime import datetime
 
-from src.utils.config import load_config
 from src.connector.mt5_connector import MT5Connector
 from src.risk.risk_manager import RiskManager
 from src.strategy.strategy_factory import StrategyFactory
+from src.utils.config import load_config
 from src.utils.logger import Logger
 
 

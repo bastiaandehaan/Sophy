@@ -1,10 +1,10 @@
 # src/ftmo/ftmo_helper.py
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-from typing import Dict, Optional
 import os
-from datetime import datetime, date
+from typing import Dict
+
+import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
 
 
 class FTMOHelper:

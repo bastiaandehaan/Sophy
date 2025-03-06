@@ -1,10 +1,9 @@
 # src/connector/mt5_connector.py
 import time
-from datetime import datetime
 from typing import Dict, List, Optional, Any
 
-import pandas as pd
 import MetaTrader5 as mt5
+import pandas as pd
 
 
 class MT5Connector:

@@ -1,14 +1,15 @@
 from datetime import datetime
-from typing import Dict, List, Any, Optional
-import pandas as pd
+from typing import Dict, List, Any
+
 import MetaTrader5 as mt5
-import copy
+import pandas as pd
 
 # Voorbeeld imports (pas aan naar je daadwerkelijke module-structuur)
 from src.connector.mt5_connector import MT5Connector  # Placeholder
 from src.risk.risk_manager import RiskManager  # Placeholder
-from src.utils.logger import Logger  # Placeholder
 from src.strategy.base_strategy import Strategy
+from src.utils.logger import Logger  # Placeholder
+
 
 class TurtleStrategy(Strategy):
     """Implementatie van de Turtle Trading strategie geoptimaliseerd voor FTMO met ondersteuning voor swing modus."""
@@ -161,7 +162,8 @@ class TurtleStrategy(Strategy):
             return 0.0
         latest_close = df['close'].iloc[-1]
         latest_ema = df['ema_50'].iloc[-1]
-        ema_slope = (df['ema_50'].iloc[-1] - df['ema_50'].iloc[-10]) / df['ema_50'].iloc[-10] if df['ema_50'].iloc[-10] != 0 else 0
+        ema_slope = (df['ema_50'].iloc[-1] - df['ema_50'].iloc[-10]) / df['ema_50'].iloc[-10] if df['ema_50'].iloc[
+                                                                                                     -10] != 0 else 0
         latest_atr = df['atr'].iloc[-1] if 'atr' in df and not pd.isna(df['atr'].iloc[-1]) else latest_close * 0.01
         distance = (latest_close - latest_ema) / latest_atr
         distance_score = min(1.0, max(0.0, distance / 3))
@@ -259,7 +261,8 @@ class TurtleStrategy(Strategy):
 
             account_info = self.connector.get_account_info()
             account_balance = account_info.get('balance', self.config.get('mt5', {}).get('account_balance', 100000))
-            lot_size = self.risk_manager.calculate_position_size(symbol, current_price, stop_loss, account_balance, trend_strength)
+            lot_size = self.risk_manager.calculate_position_size(symbol, current_price, stop_loss, account_balance,
+                                                                 trend_strength)
 
             if not self.risk_manager.check_trade_risk(symbol, lot_size, current_price, stop_loss):
                 self.logger.log_info(f"Trade overschrijdt risicolimiet voor {symbol}")
@@ -318,7 +321,8 @@ class TurtleStrategy(Strategy):
             min_hold_time = 2 if self.swing_mode else 1
             time_condition_met = position_age_days >= min_hold_time
 
-            if (time_condition_met and current_price > profit_target_1 and position.ticket in self.position_initial_volumes):
+            if (
+                    time_condition_met and current_price > profit_target_1 and position.ticket in self.position_initial_volumes):
                 initial_volume = self.position_initial_volumes[position.ticket]
                 partial_volume = round(initial_volume * 0.4, 2)
                 if position.volume >= partial_volume and partial_volume >= 0.01:
@@ -328,7 +332,8 @@ class TurtleStrategy(Strategy):
                             "SELL", symbol, partial_volume, 0, 0, f"Partial Profit 40% - ticket:{position.ticket}"
                         )
                         if partial_result:
-                            self.logger.log_trade(symbol, "SELL", current_price, partial_volume, 0, 0, "Partial Profit 40%")
+                            self.logger.log_trade(symbol, "SELL", current_price, partial_volume, 0, 0,
+                                                  "Partial Profit 40%")
                             remaining_volume = position.volume - partial_volume
                             if remaining_volume >= 0.01:
                                 self.connector.modify_position(position.ticket, stop_loss=entry_price, take_profit=0)
@@ -336,7 +341,8 @@ class TurtleStrategy(Strategy):
                     except Exception as e:
                         self.logger.log_error(f"Fout bij gedeeltelijke winstneming voor {symbol}: {e}")
 
-            elif (time_condition_met and current_price > profit_target_2 and position.ticket in self.position_initial_volumes):
+            elif (
+                    time_condition_met and current_price > profit_target_2 and position.ticket in self.position_initial_volumes):
                 initial_volume = self.position_initial_volumes[position.ticket]
                 remaining_pct = 0.6
                 partial_volume = round(initial_volume * remaining_pct * 0.5, 2)
@@ -347,7 +353,8 @@ class TurtleStrategy(Strategy):
                             "SELL", symbol, partial_volume, 0, 0, f"Partial Profit 30% - ticket:{position.ticket}"
                         )
                         if partial_result:
-                            self.logger.log_trade(symbol, "SELL", current_price, partial_volume, 0, 0, "Partial Profit 30%")
+                            self.logger.log_trade(symbol, "SELL", current_price, partial_volume, 0, 0,
+                                                  "Partial Profit 30%")
                             remaining_volume = position.volume - partial_volume
                             if remaining_volume >= 0.01:
                                 new_sl = entry_price + ((current_price - entry_price) * 0.5)
@@ -360,7 +367,8 @@ class TurtleStrategy(Strategy):
                 self.logger.log_info(f"Exit signaal voor {symbol} op {current_price}")
                 try:
                     close_result = self.connector.place_order(
-                        "SELL", symbol, position.volume, 0, 0, f"{'Swing' if self.swing_mode else 'Turtle'} Exit - ticket:{position.ticket}"
+                        "SELL", symbol, position.volume, 0, 0,
+                        f"{'Swing' if self.swing_mode else 'Turtle'} Exit - ticket:{position.ticket}"
                     )
                     if close_result:
                         self.logger.log_trade(

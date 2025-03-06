@@ -1,11 +1,11 @@
 # config/strategy_config.json
 {
-  "turtle_trader": {
-    "entry_period": 40,
-    "exit_period": 20,
-    "atr_period": 20,
-    "atr_multiplier": 2.5,
-    "swing_mode": true,
-    "use_trend_filter": true
-  }
+"turtle_trader": {
+"entry_period": 40,
+"exit_period": 20,
+"atr_period": 20,
+"atr_multiplier": 2.5,
+"swing_mode": true,
+"use_trend_filter": true
+}
 }
