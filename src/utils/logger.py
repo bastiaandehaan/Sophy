@@ -4,6 +4,7 @@ import os
 from datetime import datetime
 from typing import Dict, Any, Optional
 
+
 class Logger:
     """Verbeterde klasse voor logging van trades en botactiviteit"""
 

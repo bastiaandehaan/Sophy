@@ -1,11 +1,11 @@
 # tests/unit/test_turtle_strategy.py
-import unittest
-from unittest.mock import MagicMock, patch
-import sys
 import os
-import pandas as pd
+import sys
+import unittest
+from unittest.mock import MagicMock
+
 import numpy as np
-from datetime import datetime
+import pandas as pd
 
 # Voeg project root toe aan sys.path
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))

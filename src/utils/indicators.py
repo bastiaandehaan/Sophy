@@ -1,4 +1,6 @@
 # sophy/utils/indicators.py
+from typing import Tuple
+
 import numpy as np
 import pandas as pd
 

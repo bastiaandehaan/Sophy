@@ -1,9 +1,12 @@
 # turtle_trader/presentation/dashboard.py
+from datetime import datetime
 from typing import Dict
 
 import dash
 from dash import dcc, html
 from dash.dependencies import Input, Output
+
+from utils.visualizer import Visualizer
 
 
 class TradingDashboard:
@@ -56,6 +59,48 @@ class TradingDashboard:
             [Input('interval-component', 'n_intervals')]
         )
         def update_equity_chart(n):
+            # Haal de laatste equity data op
+            log_file = self.config['logging'].get('log_file', 'logs/trading_log.csv')
+            visualizer = Visualizer(log_file)
+            df = visualizer.load_trade_data()
+
+            # Maak een figure voor de equity chart
+            if df.empty or 'Type' not in df.columns:
+                figure = {
+                    'data': [],
+                    'layout': {'title': 'Geen data beschikbaar'}
+                }
+            else:
+                # Filter op STATUS entries
+                status_df = df[df['Type'] == 'STATUS'].copy()
+
+                # Extraheer balance data
+                balances = []
+                timestamps = []
+                for _, row in status_df.iterrows():
+                    comment = row['Comment']
+                    timestamp = row['Timestamp']
+                    if 'Balance: ' in comment:
+                        balance_str = comment.split('Balance: ')[1].split(',')[0]
+                        try:
+                            balances.append(float(balance_str))
+                            timestamps.append(timestamp)
+                        except:
+                            pass
+
+                # Maak figuur
+                figure = {
+                    'data': [{'x': timestamps, 'y': balances, 'type': 'line', 'name': 'Account Balance'}],
+                    'layout': {'title': 'Account Equity Curve'}
+                }
+
+            # Maak accountmetrics
+            account_metrics = html.Div([
+                html.P(f"Laatste update: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"),
+                html.P(f"Aantal trades: {len(df[df['Type'] == 'TRADE'])}")
+            ])
+
+            return figure, account_metrics
 
     # Fetch latest equity data and update chart
     # ...

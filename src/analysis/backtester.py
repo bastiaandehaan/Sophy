@@ -1,15 +1,15 @@
+import os
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
-import os
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.dates import DateFormatter
-import seaborn as sns
 
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+
+from src.strategy.strategy_factory import StrategyFactory
 from src.utils.config import load_config
 from src.utils.logger import Logger
-from src.strategy.strategy_factory import StrategyFactory
+
 
 class DummyConnector:
     """Dummy connector voor backtest doeleinden met geavanceerde datahandling."""
@@ -58,8 +58,10 @@ class DummyConnector:
 
         df = self.data_cache[cache_key]
         last_row = df.iloc[-1]
+
         class Tick:
             pass
+
         tick = Tick()
         tick.ask = last_row['close']
         tick.bid = last_row['close'] * 0.999  # Simpele bid/ask spread
@@ -161,7 +163,7 @@ class BacktestStrategy:
 
             # Simuleer stop loss
             if (pos['action'] == 'BUY' and current_price <= pos['stop_loss']) or \
-               (pos['action'] == 'SELL' and current_price >= pos['stop_loss']):
+                    (pos['action'] == 'SELL' and current_price >= pos['stop_loss']):
                 self.close_position(ticket, current_price)
                 result['signal'] = 'EXIT'
                 result['action'] = 'CLOSE'
@@ -185,7 +187,7 @@ class BacktestStrategy:
                 'close_time': datetime.now()
             })
             self.logger.log_trade(pos['symbol'], 'SELL' if pos['action'] == 'BUY' else 'BUY', close_price,
-                                 pos['volume'], 0, 0, f"Backtest Exit, Profit: {profit:.2f}")
+                                  pos['volume'], 0, 0, f"Backtest Exit, Profit: {profit:.2f}")
             del self.positions[ticket]
 
 
@@ -204,7 +206,8 @@ def run_backtest():
     # Haal symbols en timeframe op
     symbols = config['mt5'].get('symbols', ['EURUSD'])
     timeframe = config['mt5'].get('timeframe', 'H4')
-    start_date = config.get('backtest', {}).get('start_date', (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d'))
+    start_date = config.get('backtest', {}).get('start_date',
+                                                (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d'))
     end_date = config.get('backtest', {}).get('end_date', datetime.now().strftime('%Y-%m-%d'))
 
     # Setup dummy connector
@@ -219,7 +222,8 @@ def run_backtest():
         if not df.empty:
             df = df[(df['date'] >= start_date) & (df['date'] <= end_date)]
             data[symbol] = df
-            logger.log_info(f"Geladen: {symbol} {timeframe} - {len(df)} candles van {df['date'].min()} tot {df['date'].max()}")
+            logger.log_info(
+                f"Geladen: {symbol} {timeframe} - {len(df)} candles van {df['date'].min()} tot {df['date'].max()}")
         else:
             logger.log_info(f"Kon geen data laden voor {symbol} {timeframe}", level="ERROR")
             continue
@@ -257,7 +261,8 @@ def run_backtest():
     winning_trades = sum(1 for t in backtest.trades if t['profit'] > 0)
     win_rate = (winning_trades / trades * 100) if trades > 0 else 0
     avg_profit = np.mean([t['profit'] for t in backtest.trades if t['profit'] > 0]) if winning_trades > 0 else 0
-    avg_loss = np.mean([t['profit'] for t in backtest.trades if t['profit'] < 0]) if len([t for t in backtest.trades if t['profit'] < 0]) > 0 else 0
+    avg_loss = np.mean([t['profit'] for t in backtest.trades if t['profit'] < 0]) if len(
+        [t for t in backtest.trades if t['profit'] < 0]) > 0 else 0
     drawdown = min(0, min(equity_curve) - 100000) if equity_curve else 0
 
     logger.log_performance_metrics({
@@ -282,7 +287,8 @@ def run_backtest():
     plt.savefig(os.path.join(os.path.dirname(log_file), 'backtest_equity_curve.png'))
     plt.close()
 
-    logger.log_info(f"Backtest voltooid. Totale winst: {total_profit:.2f}, Win Rate: {win_rate:.2f}%, Max Drawdown: {drawdown:.2f}")
+    logger.log_info(
+        f"Backtest voltooid. Totale winst: {total_profit:.2f}, Win Rate: {win_rate:.2f}%, Max Drawdown: {drawdown:.2f}")
     logger.log_info("====== Sophy Backtest Ended ======")
 
 
