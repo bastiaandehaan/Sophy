@@ -21,6 +21,7 @@ data/
 *.bak
 *.swp
 
+
 # Ignore Python notebooks and their checkpoints (if used)
 *.ipynb_checkpoints/
 
