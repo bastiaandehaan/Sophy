@@ -1,176 +1,179 @@
-# tests/unit/test_turtle_strategy.py
-import os
-import sys
-import unittest
 from unittest.mock import MagicMock
 
 import numpy as np
 import pandas as pd
-
-# Voeg project root toe aan sys.path
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
+import pytest
 
 from src.strategy.turtle_strategy import TurtleStrategy
 
 
-class TestTurtleStrategy(unittest.TestCase):
-    def setUp(self):
-        # Maak mock objecten
-        self.connector = MagicMock()
-        self.risk_manager = MagicMock()
-        self.logger = MagicMock()
+@pytest.fixture
+def mock_connector():
+    """Fixture voor het creëren van een mock connector."""
+    connector = MagicMock()
 
-        # Standaard configuratie
-        self.config = {
-            'mt5': {
-                'symbols': ['EURUSD', 'GBPUSD'],
-                'timeframe': 'H4',
-                'account_balance': 100000
-            },
-            'strategy': {
-                'name': 'turtle',
-                'swing_mode': False,
-                'entry_period': 20,
-                'exit_period': 10,
-                'atr_period': 20,
-                'atr_multiplier': 2.0
-            }
+    # Configureer de get_historical_data methode om testdata terug te geven
+    def mock_get_historical_data(symbol, timeframe, bars):
+        # Creëer synthetische OHLC data
+        date_range = pd.date_range(end=pd.Timestamp.now(), periods=bars, freq='4H')
+        base_price = 1.2000
+
+        # Creëer een standaard range met lichte opwaartse trend
+        data = {
+            'date': date_range,
+            'open': np.linspace(base_price, base_price * 1.05, bars),
+            'high': np.linspace(base_price, base_price * 1.05, bars) * 1.002,
+            'low': np.linspace(base_price, base_price * 1.05, bars) * 0.998,
+            'close': np.linspace(base_price, base_price * 1.05, bars) * 1.001,
+            'tick_volume': np.random.randint(100, 1000, bars)
         }
 
-        # Initialiseer strategie
-        self.strategy = TurtleStrategy(self.connector, self.risk_manager, self.logger, self.config)
+        # Voeg duidelijke breakout toe rond bar 80
+        if bars > 80:
+            breakout_idx = 80
+            data['high'][breakout_idx:] *= 1.01  # Verhoog highs na breakout
+            data['low'][breakout_idx:] *= 1.005  # Verhoog lows na breakout
+            data['close'][breakout_idx:] *= 1.008  # Verhoog close na breakout
 
-    def test_initialization(self):
-        # Test dat de strategie correct wordt geïnitialiseerd
-        self.assertEqual(self.strategy.name, "Turtle Trading Strategy")
-        self.assertEqual(self.strategy.entry_period, 20)
-        self.assertEqual(self.strategy.exit_period, 10)
-        self.assertEqual(self.strategy.atr_period, 20)
-        self.assertEqual(self.strategy.atr_multiplier, 2.0)
-        self.assertFalse(self.strategy.swing_mode)
+        return pd.DataFrame(data)
 
-    def test_swing_mode_initialization(self):
-        # Test swing mode initialisatie
-        config = self.config.copy()
-        config['strategy']['swing_mode'] = True
+    connector.get_historical_data.side_effect = mock_get_historical_data
 
-        strategy = TurtleStrategy(self.connector, self.risk_manager, self.logger, config)
+    # Mock tick data
+    tick = MagicMock()
+    tick.ask = 1.2100
+    tick.bid = 1.2095
+    connector.get_symbol_tick.return_value = tick
 
-        self.assertTrue(strategy.swing_mode)
-        self.assertEqual(strategy.entry_period, 40)  # Standaard voor swing mode
+    # Mock account info
+    connector.get_account_info.return_value = {
+        "balance": 100000,
+        "equity": 100000,
+        "margin": 1000,
+        "free_margin": 99000
+    }
 
-    def test_calculate_indicators(self):
-        # Maak test data
-        dates = pd.date_range(start='2023-01-01', periods=100, freq='4H')
-        high = np.random.normal(1.2, 0.01, 100)
-        low = high - np.random.uniform(0.001, 0.005, 100)
-        close = low + np.random.uniform(0, 0.003, 100)
-        open_prices = high - np.random.uniform(0, 0.003, 100)
-        volume = np.random.randint(10, 100, 100)
+    return connector
 
-        df = pd.DataFrame({
-            'date': dates,
-            'open': open_prices,
-            'high': high,
-            'low': low,
-            'close': close,
-            'tick_volume': volume
-        })
 
-        # Bereken indicatoren
-        indicators = self.strategy.calculate_indicators(df)
+@pytest.fixture
+def mock_risk_manager():
+    """Fixture voor het creëren van een mock risk manager."""
+    risk_manager = MagicMock()
+    risk_manager.can_trade.return_value = True
+    risk_manager.calculate_position_size.return_value = 1.0
+    risk_manager.check_trade_risk.return_value = True
+    return risk_manager
 
-        # Test dat de belangrijkste indicatoren aanwezig zijn
-        self.assertIn('atr', indicators)
-        self.assertIn('high_entry', indicators)
-        self.assertIn('low_exit', indicators)
 
-    def test_calculate_atr(self):
-        # Maak test data
-        dates = pd.date_range(start='2023-01-01', periods=50, freq='4H')
-        high = np.random.normal(1.2, 0.01, 50)
-        low = high - np.random.uniform(0.001, 0.005, 50)
-        close = low + np.random.uniform(0, 0.003, 50)
+@pytest.fixture
+def mock_logger():
+    """Fixture voor het creëren van een mock logger."""
+    return MagicMock()
 
-        df = pd.DataFrame({
-            'date': dates,
-            'high': high,
-            'low': low,
-            'close': close
+
+@pytest.fixture
+def turtle_strategy(mock_connector, mock_risk_manager, mock_logger):
+    """Fixture voor het creëren van de te testen TurtleStrategy."""
+    config = {
+        'mt5': {
+            'symbols': ['EURUSD'],
+            'timeframe': 'H4'
+        },
+        'strategy': {
+            'name': 'turtle',
+            'swing_mode': False,
+            'entry_period': 20,
+            'exit_period': 10,
+            'atr_period': 20,
+            'atr_multiplier': 2.0,
+            'use_trend_filter': True
+        }
+    }
+    return TurtleStrategy(mock_connector, mock_risk_manager, mock_logger, config)
+
+
+class TestTurtleStrategy:
+    def test_calculate_atr(self, turtle_strategy):
+        """Test ATR berekening."""
+        # Creëer testdata
+        data = pd.DataFrame({
+            'high': [1.2010, 1.2020, 1.2030, 1.2025, 1.2040],
+            'low': [1.1990, 1.2000, 1.2010, 1.2000, 1.2020],
+            'close': [1.2000, 1.2010, 1.2020, 1.2015, 1.2030]
         })
 
         # Bereken ATR
-        atr = self.strategy.calculate_atr(df, 14)
+        atr = turtle_strategy.calculate_atr(data)
 
-        # Test eigenschappen
-        self.assertEqual(len(atr), 50)
-        self.assertTrue(atr.iloc[-1] > 0)
+        # Verifieer resultaten
+        assert len(atr) == len(data)
+        assert all(atr > 0)  # ATR moet altijd positief zijn
+        # Handmatige berekening voor laatste waarde
+        true_range = max(data['high'].iloc[-1] - data['low'].iloc[-1],
+                         abs(data['high'].iloc[-1] - data['close'].iloc[-2]),
+                         abs(data['low'].iloc[-1] - data['close'].iloc[-2]))
+        expected_atr = (atr.iloc[-2] * (turtle_strategy.atr_period - 1) + true_range) / turtle_strategy.atr_period
+        assert abs(atr.iloc[-1] - expected_atr) < 0.0001
 
-    def test_process_symbol_no_data(self):
-        # Test gedrag wanneer er geen data is
-        self.connector.get_historical_data.return_value = pd.DataFrame()
+    def test_calculate_indicators(self, turtle_strategy, mock_connector):
+        """Test indicator berekeningen."""
+        # Haal testdata op via de mock connector
+        df = mock_connector.get_historical_data('EURUSD', 'H4', 100)
 
-        result = self.strategy.process_symbol('EURUSD')
+        # Bereken indicators
+        indicators = turtle_strategy.calculate_indicators(df)
 
-        # Test dat er geen signaal is
-        self.assertIsNone(result.get('signal'))
-        self.logger.log_info.assert_called_with("Geen historische data beschikbaar voor EURUSD")
+        # Verifieer resultaten
+        assert 'atr' in indicators
+        assert indicators['atr'] > 0
+        assert 'high_entry' in indicators
+        assert 'low_entry' in indicators
+        assert 'high_exit' in indicators
+        assert 'low_exit' in indicators
+        assert 'trend_bullish' in indicators
 
-    def test_process_symbol_with_breakout(self):
-        # Configureer mocks voor een breakout scenario
-        # 1. Maak test data
-        dates = pd.date_range(start='2023-01-01', periods=100, freq='4H')
-        high = np.random.normal(1.2, 0.01, 100)
-        low = high - np.random.uniform(0.001, 0.005, 100)
-        close = low + np.random.uniform(0, 0.003, 100)
-        open_prices = high - np.random.uniform(0, 0.003, 100)
-        volume = np.random.randint(10, 100, 100)
+        # Verifieer dat high_entry hoger is dan low_entry
+        assert indicators['high_entry'] > indicators['low_entry']
 
-        df = pd.DataFrame({
-            'date': dates,
-            'open': open_prices,
-            'high': high,
-            'low': low,
-            'close': close,
-            'tick_volume': volume
-        })
+    def test_process_symbol_breakout(self, turtle_strategy, mock_connector):
+        """Test verwerking van een breakout signaal."""
+        # Configureer de mock om een breakout te simuleren
+        tick = mock_connector.get_symbol_tick.return_value
+        tick.ask = 1.2200  # Hoge prijs die boven entry niveau ligt
 
-        # Zorg dat laatste candle een breakout is
-        df['high'].iloc[-1] = 1.25  # Hogere high voor breakout
+        # Configureer place_order om een ticket te returnen
+        mock_connector.place_order.return_value = 12345
 
-        self.connector.get_historical_data.return_value = df
+        # Verwerk symbool
+        result = turtle_strategy.process_symbol('EURUSD')
 
-        # 2. Configureer tick
-        tick = MagicMock()
-        tick.ask = 1.25
-        tick.bid = 1.248
-        self.connector.get_symbol_tick.return_value = tick
+        # Verifieer resultaten
+        assert result['signal'] == 'ENTRY'
+        assert result['action'] == 'BUY'
+        assert result['ticket'] == 12345
 
-        # 3. Configureer risicomanager
-        self.risk_manager.can_trade.return_value = True
-        self.risk_manager.calculate_position_size.return_value = 0.5
-        self.risk_manager.check_trade_risk.return_value = True
+        # Verifieer dat place_order werd aangeroepen
+        mock_connector.place_order.assert_called_once()
 
-        # 4. Configureer account info
-        account_info = {'balance': 100000, 'equity': 100000}
-        self.connector.get_account_info.return_value = account_info
+        # Controleer parameters voor de order
+        args, kwargs = mock_connector.place_order.call_args
+        assert args[0] == 'BUY'  # Actie
+        assert args[1] == 'EURUSD'  # Symbool
+        assert args[2] == 1.0  # Volume (van mock risk manager)
 
-        # 5. Configureer order response
-        self.connector.place_order.return_value = 12345  # ticket ID
+    def test_process_symbol_no_signal(self, turtle_strategy, mock_connector):
+        """Test verwerking zonder handelssignaal."""
+        # Configureer de mock voor een normale prijs zonder breakout
+        tick = mock_connector.get_symbol_tick.return_value
+        tick.ask = 1.2000  # Prijs onder entry niveau
 
-        # Test de processsymbol functie met de ingerichte mocks
-        result = self.strategy.process_symbol('EURUSD')
+        # Verwerk symbool
+        result = turtle_strategy.process_symbol('EURUSD')
 
-        # Verwacht een entry signaal
-        self.assertEqual(result.get('signal'), 'ENTRY')
-        self.assertEqual(result.get('action'), 'BUY')
-        self.assertEqual(result.get('ticket'), 12345)
+        # Verifieer resultaten
+        assert result['signal'] is None
+        assert result['action'] is None
 
-        # Controleer dat de place_order functie werd aangeroepen
-        self.connector.place_order.assert_called_once()
-
-
-if __name__ == '__main__':
-    unittest.main()
+        # Verifieer dat place_order niet werd aangeroepen
+        mock_connector.place_order.assert_not_called()

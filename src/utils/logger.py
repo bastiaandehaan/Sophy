@@ -132,23 +132,36 @@ class Logger:
 
     def log_status(self, account_info: Dict[str, Any], open_positions: Dict[str, Any]):
         """
-        Log huidige account status.
+        Log huidige account status met verbeterde positieverwerking.
 
         Parameters:
         -----------
-        account_info : dict
+        account_info : Dict[str, Any]
             Informatie over de account.
-        open_positions : dict
+        open_positions : Dict[str, Any]
             Informatie over open posities.
         """
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         positions_count = sum(len(pos_list) for pos_list in open_positions.values()) if open_positions else 0
-        positions_detail = ", ".join(
-            f"{symbol}:{pos.volume}@{((pos.profit / account_info.get('balance', 100000)) * 100):.2f}%"
-            for symbol, pos_list in open_positions.items()
-            for pos in pos_list
-        ) if positions_count > 0 else ""
+        positions_detail = ""
+
+        if positions_count > 0:
+            position_parts = []
+            for symbol, pos_list in open_positions.items():
+                for pos in pos_list:
+                    # Controleer of we met een dict of een object werken
+                    if isinstance(pos, dict):
+                        vol = pos.get('volume', 0)
+                        profit_pct = (pos.get('profit', 0) / account_info.get('balance', 100000)) * 100
+                    else:
+                        # Object met attributen (zoals MT5 positie object)
+                        vol = getattr(pos, 'volume', 0)
+                        profit_pct = (getattr(pos, 'profit', 0) / account_info.get('balance', 100000)) * 100
+
+                    position_parts.append(f"{symbol}:{vol}@{profit_pct:.2f}%")
+
+            positions_detail = ", ".join(position_parts)
 
         equity = account_info.get('equity', 0)
         balance = account_info.get('balance', 0)
