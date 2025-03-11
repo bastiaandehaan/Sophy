@@ -1,4 +1,3 @@
-import pytest
 from src.risk.position_sizer import calculate_position_size
 
 

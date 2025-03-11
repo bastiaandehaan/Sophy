@@ -20,6 +20,7 @@ data/
 *.tmp
 *.bak
 *.swp
+*.sh text eol=lf
 
 
 # Ignore Python notebooks and their checkpoints (if used)

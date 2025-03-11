@@ -5,11 +5,11 @@ Sophy Framework Verificatiescript
 Dit script voert een reeks tests uit om te controleren of de Sophy Trading Framework
 correct is geïnstalleerd en de basisfunctionaliteit werkt.
 """
+import importlib
+import json
 import os
 import sys
-import json
-import importlib
-from datetime import datetime, timedelta
+from datetime import datetime
 
 # Voeg src directory toe aan Python path
 script_dir = os.path.dirname(os.path.abspath(__file__))
