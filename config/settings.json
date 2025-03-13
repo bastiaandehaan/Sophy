@@ -12,28 +12,26 @@
     "symbol_mapping": {
       "US30": "US30.cash"
     },
-    "timeframe": "H4",
-    "account_balance": 100000
+    "timeframe": "H4"
   },
   "risk": {
-    "max_risk_per_trade": 0.015,
-    "max_daily_drawdown": 0.05,
-    "max_total_drawdown": 0.10,
-    "leverage": 30
+    "risk_per_trade": 0.015,
+    "daily_drawdown_limit": 0.05,
+    "total_drawdown_limit": 0.10,
+    "max_trades_per_day": 5,
+    "initial_balance": 100000,
+    "profit_target": 0.10
   },
   "strategy": {
     "name": "turtle",
-    "swing_mode": true,
-    "entry_period": 40,
-    "exit_period": 20,
-    "atr_period": 20,
-    "atr_multiplier": 2.5
+    "swing_mode": true
   },
   "logging": {
     "log_file": "logs/trading_log.csv",
     "log_level": "INFO"
   },
   "output": {
-    "data_dir": "data"
+    "data_dir": "data",
+    "backtest_results_dir": "backtest_results"
   }
 }

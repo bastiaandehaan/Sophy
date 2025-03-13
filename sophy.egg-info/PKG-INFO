@@ -1,0 +1,26 @@
+Metadata-Version: 2.2
+Name: sophy
+Version: 0.1.0
+Summary: Een Python-gebaseerd algoritmisch trading systeem met Turtle Trading strategie
+Home-page: https://github.com/yourusername/sophy
+Author: Sophy Trading Systems
+Author-email: info@sophytrading.com
+Keywords: trading,algoritm,metatrader,ftmo,turtle
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Financial and Insurance Industry
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Requires-Python: >=3.9
+Requires-Dist: pandas>=1.3.0
+Requires-Dist: numpy>=1.20.0
+Requires-Dist: matplotlib>=3.4.0
+Requires-Dist: seaborn>=0.11.0
+Requires-Dist: MetaTrader5>=5.0.0
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: home-page
+Dynamic: keywords
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary

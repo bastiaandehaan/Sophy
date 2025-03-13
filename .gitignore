@@ -22,6 +22,9 @@ data/
 *.swp
 *.sh text eol=lf
 
+# Local context generation
+*local_context.txt
+
 
 # Ignore Python notebooks and their checkpoints (if used)
 *.ipynb_checkpoints/

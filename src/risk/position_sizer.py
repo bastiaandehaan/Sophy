@@ -1,11 +1,11 @@
 def calculate_position_size(
-        entry_price: float,
-        stop_loss: float,
-        account_balance: float,
-        risk_percentage: float,
-        pip_value: float,
-        min_lot: float = 0.01,
-        max_lot: float = 10.0
+    entry_price: float,
+    stop_loss: float,
+    account_balance: float,
+    risk_percentage: float,
+    pip_value: float,
+    min_lot: float = 0.01,
+    max_lot: float = 10.0,
 ) -> float:
     """
     Calculate optimal position size based on risk parameters
