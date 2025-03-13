@@ -1,252 +1,319 @@
 # src/risk/risk_manager.py
-from datetime import date
-from typing import Dict, Optional, Tuple
+from datetime import datetime
+from typing import Dict, Optional, Any, Set
+from decimal import Decimal, getcontext, InvalidOperation
+import time
+import random
 
+from src.connector.mt5_connector import MT5Connector
+from src.utils.logger import Logger
 
 class RiskManager:
     """
-    Risicomanagement met FTMO compliance checks.
+    Risicomanager die FTMO-regels implementeert en positiegrootte berekent.
 
-    Verantwoordelijk voor het bewaken van risicoparameters zoals dagelijkse verlieslimiet,
-    maximale drawdown, en positiegrootte berekeningen volgens risicoregels.
+    Belangrijkste functies:
+    1. Berekent positiegrootte op basis van risico per trade.
+    2. Houdt dagelijkse en totale drawdown bij volgens FTMO-regels.
+    3. Bepaalt of trading mag doorgaan op basis van risicoparameters.
     """
 
-    def __init__(self, config: Dict, logger):
-        """Initialiseer met configuratieparameters"""
-        self.config = config
+    def __init__(self, config: Dict, logger: Logger, mt5_connector: MT5Connector) -> None:
+        """
+        Initialiseer de risicomanager.
+
+        Args:
+            config (Dict): Configuratiedictionary met risicoparameters.
+            logger (Logger): Logger instantie voor logging.
+            mt5_connector (MT5Connector): MetaTrader 5 connector voor accountinformatie.
+        """
         self.logger = logger
+        self.mt5_connector = mt5_connector
 
-        # Extraheer risicoparameters
-        self.max_risk_per_trade = self.config.get('max_risk_per_trade', 0.01)
-        self.max_daily_drawdown = self.config.get('max_daily_drawdown', 0.05)
-        self.max_total_drawdown = self.config.get('max_total_drawdown', 0.10)
-        self.leverage = self.config.get('leverage', 30)
+        # Stel precisie in voor Decimal berekeningen (12 decimalen voor FX-trading)
+        getcontext().prec = 12
 
-        # Initialiseer tracking variabelen
-        self.daily_losses = 0
-        self.current_date = date.today()
-        self.initial_balance = self.config.get('account_balance', 100000)
-        self.daily_trades_count = 0
-        self.max_daily_trades = self.config.get('max_daily_trades', 10)
+        # Algemene risicoparameters
+        self.risk_per_trade = Decimal(str(config.get("risk_per_trade", "0.01")))  # 1% risico per trade
+        self.max_trades_per_day = config.get("max_trades_per_day", 5)
+        self.max_trades_per_symbol = config.get("max_trades_per_symbol", 1)
 
-        self.logger.log_info(f"RiskManager geïnitialiseerd met max risk per trade: {self.max_risk_per_trade * 100}%, "
-                             f"max daily drawdown: {self.max_daily_drawdown * 100}%, "
-                             f"max total drawdown: {self.max_total_drawdown * 100}%, "
-                             f"leverage: {self.leverage}")
+        # FTMO-specifieke parameters
+        self.initial_balance = Decimal("0")  # Wordt ingesteld tijdens initialisatie
+        self.daily_drawdown_limit = Decimal(str(config.get("daily_drawdown_limit", "0.05")))  # 5% max dagelijks verlies
+        self.total_drawdown_limit = Decimal(str(config.get("total_drawdown_limit", "0.10")))  # 10% max totaal verlies
+        self.profit_target = Decimal(str(config.get("profit_target", "0.10")))  # 10% winstdoel
+        self.min_trading_days = config.get("min_trading_days", 4)  # Min. 4 dagen met trades
 
-    def check_ftmo_limits(self, account_info: Dict) -> Tuple[bool, Optional[str]]:
+        # State bijhouden
+        self.today_trades = 0
+        self.today_pl = Decimal("0")
+        self.trading_days: Set[datetime.date] = set()  # Correcte type-aanduiding
+        self.highest_balance = Decimal("0")
+        self.is_trading_allowed = True
+
+        # Startdatum van de trading sessie
+        self.start_date = datetime.now().date()
+
+        self.logger.info(
+            f"RiskManager geïnitialiseerd: risk_per_trade={self.risk_per_trade}, "
+            f"daily_limit={self.daily_drawdown_limit * 100}%, "
+            f"total_limit={self.total_drawdown_limit * 100}%"
+        )
+
+    def initialize(self) -> None:
         """
-        Controleer of huidige accountstatus voldoet aan FTMO-limieten
+        Initialiseer de risk manager met de huidige accountgegevens.
 
-        Parameters:
-        -----------
-        account_info : Dict
-            Dictionary met huidige accountinformatie
+        Haalt het huidige saldo op en stelt dit in als het initiële en hoogste saldo
+        voor drawdown berekeningen.
+
+        Raises:
+            RuntimeError: Als initialisatie mislukt na meerdere pogingen.
+        """
+        account_info = self._retry_get_account_info(max_wait=10.0)
+        if account_info:
+            self.initial_balance = Decimal(str(account_info["balance"]))
+            self.highest_balance = self.initial_balance
+            self.logger.info(f"RiskManager geïnitialiseerd met saldo: {self.initial_balance}")
+        else:
+            self.logger.error("Kon accountinformatie niet ophalen na meerdere pogingen")
+            self.is_trading_allowed = False
+            raise RuntimeError("RiskManager initialisatie mislukt")
+
+    def _retry_get_account_info(self, retries: int = 3, delay: float = 1.0, max_wait: float = 10.0) -> Optional[Dict[str, float]]:
+        """
+        Probeer accountinformatie op te halen met retries.
+
+        Args:
+            retries (int): Aantal retry-pogingen.
+            delay (float): Basisvertraging tussen retries in seconden.
+            max_wait (float): Maximale totale wachttijd in seconden.
 
         Returns:
-        --------
-        Tuple van (stop_trading, reason)
-        - stop_trading: True als trading gestopt moet worden
-        - reason: Beschrijving waarom trading moet stoppen, of None
+            Optional[Dict[str, float]]: Accountinformatie of None als het mislukt.
         """
-        # Reset dagelijkse variabelen als het een nieuwe dag is
-        today = date.today()
-        if today != self.current_date:
-            self.daily_losses = 0
-            self.daily_trades_count = 0
-            self.current_date = today
-            self.logger.log_info("Dagelijkse risico limieten gereset (nieuwe handelsdag)")
+        total_wait = 0.0
+        for attempt in range(retries):
+            try:
+                account_info = self.mt5_connector.get_account_info()
+                if account_info:
+                    return account_info
+            except (ConnectionError, ValueError, InvalidOperation) as e:
+                wait_time = delay + random.uniform(0, 0.5)  # Willekeurige vertraging
+                total_wait += wait_time
+                if total_wait > max_wait:
+                    self.logger.error("Maximum wachttijd overschreden")
+                    return None
+                self.logger.warning(f"Poging {attempt + 1} mislukt: {e}")
+                time.sleep(wait_time)
+        self.logger.error("Kon accountinformatie niet ophalen na meerdere pogingen")
+        return None
 
-        # Haal account data op
-        current_balance = account_info.get('balance', 0)
-        current_equity = account_info.get('equity', 0)
-
-        # Bereken winst/verlies percentages
-        balance_change_pct = (current_balance - self.initial_balance) / self.initial_balance
-        equity_change_pct = (current_equity - self.initial_balance) / self.initial_balance
-
-        # Controleer of winstdoel is bereikt (10%)
-        if balance_change_pct >= 0.10:
-            return True, f"Winstdoel bereikt: {balance_change_pct:.2%}"
-
-        # Controleer dagelijkse verlieslimiet (5%)
-        if equity_change_pct <= -self.max_daily_drawdown:
-            return True, f"Dagelijkse verlieslimiet bereikt: {equity_change_pct:.2%}"
-
-        # Controleer totale verlieslimiet (10%)
-        if equity_change_pct <= -self.max_total_drawdown:
-            return True, f"Maximale drawdown bereikt: {equity_change_pct:.2%}"
-
-        # Alles is binnen limieten
-        return False, None
-
-    def calculate_position_size(self,
-                                symbol: str,
-                                entry_price: float,
-                                stop_loss: float,
-                                account_balance: float,
-                                trend_strength: float = 0.5) -> float:
+    def _retry_get_symbol_info(self, symbol: str, retries: int = 3, delay: float = 1.0, max_wait: float = 10.0) -> Optional[Dict[str, Any]]:
         """
-        Bereken optimale positiegrootte gebaseerd op risicoparameters
+        Probeer symboolinformatie op te halen met retries.
 
-        Parameters:
-        -----------
-        symbol : str
-            Trading symbool
-        entry_price : float
-            Ingangsprijs voor de positie
-        stop_loss : float
-            Stop loss prijs
-        account_balance : float
-            Huidige account balans
-        trend_strength : float
-            Sterkte van de trend (0-1), gebruikt voor positiegrootte aanpassing
+        Args:
+            symbol (str): Handelssymbool.
+            retries (int): Aantal retry-pogingen.
+            delay (float): Basisvertraging tussen retries in seconden.
+            max_wait (float): Maximale totale wachttijd in seconden.
 
         Returns:
-        --------
-        float : Berekende positiegrootte in lots
+            Optional[Dict[str, Any]]: Symboolinformatie of None als het mislukt.
         """
-        if entry_price == 0 or stop_loss == 0:
-            self.logger.log_info(f"Ongeldige entry of stop loss voor {symbol}", level="ERROR")
-            return 0.01
+        total_wait = 0.0
+        for attempt in range(retries):
+            try:
+                symbol_info = self.mt5_connector.get_symbol_info(symbol)
+                if symbol_info:
+                    return symbol_info
+            except (ConnectionError, ValueError, InvalidOperation) as e:
+                wait_time = delay + random.uniform(0, 0.5)
+                total_wait += wait_time
+                if total_wait > max_wait:
+                    self.logger.error(f"Maximum wachttijd overschreden voor {symbol}")
+                    return None
+                self.logger.warning(f"Poging {attempt + 1} mislukt: {e}")
+                time.sleep(wait_time)
+        self.logger.error(f"Kon symboolinformatie niet ophalen voor {symbol}")
+        return None
 
-        # Voorkom delen door nul
-        if entry_price == stop_loss:
-            self.logger.log_info(f"Entry gelijk aan stop loss voor {symbol}", level="WARNING")
-            return 0.01
-
-        # Bereken risicobedrag in accountvaluta
-        risk_amount = account_balance * self.max_risk_per_trade
-
-        # Pas risico aan op basis van trendsterkte
-        adjusted_risk = risk_amount * (0.5 + trend_strength / 2)  # 50-100% van normaal risico
-
-        # Bereken pips op risico
-        pips_at_risk = abs(entry_price - stop_loss) / 0.0001  # Voor 4-cijferige forex paren
-
-        # Pas aan voor goud en indices indien nodig
-        if symbol == "XAUUSD":
-            pips_at_risk = abs(entry_price - stop_loss) / 0.01  # Voor goud (0.01 = 1 pip)
-        elif symbol in ["US30", "US30.cash", "US500", "USTEC"]:
-            pips_at_risk = abs(entry_price - stop_loss) / 0.1  # Voor indices
-
-        # Schat pip waarde (kan worden verbeterd met exacte berekening per symbool)
-        pip_value = 10.0  # Standaard pip waarde voor 1 lot
-
-        # Bereken lot size
-        lot_size = adjusted_risk / (pips_at_risk * pip_value)
-
-        # Rond af naar 2 decimalen en begrens tussen min/max waarden
-        min_lot = 0.01
-        max_lot = 10.0
-        lot_size = max(min_lot, min(lot_size, max_lot))
-        lot_size = round(lot_size, 2)
-
-        self.logger.log_info(f"Berekende positiegrootte voor {symbol}: {lot_size} lots "
-                             f"(Risk: ${adjusted_risk:.2f}, Pips: {pips_at_risk:.1f})")
-
-        return lot_size
-
-    def check_trade_risk(self,
-                         symbol: str,
-                         volume: float,
-                         entry_price: float,
-                         stop_loss: float) -> bool:
+    def calculate_position_size(
+        self,
+        symbol: str,
+        entry_price: Decimal,
+        stop_loss: Optional[Decimal] = None,
+        risk_pips: Optional[Decimal] = None,
+    ) -> float:
         """
-        Controleer of een trade binnen de risicolimieten valt
+        Bereken de positiegrootte op basis van risico per trade.
 
-        Parameters:
-        -----------
-        symbol : str
-            Trading symbool
-        volume : float
-            Positiegrootte in lots
-        entry_price : float
-            Ingangsprijs voor de positie
-        stop_loss : float
-            Stop loss prijs
+        Args:
+            symbol (str): Handelssymbool.
+            entry_price (Decimal): Ingangsprijs.
+            stop_loss (Optional[Decimal]): Stop-loss prijs (optioneel).
+            risk_pips (Optional[Decimal]): Risico in pips (optioneel).
 
         Returns:
-        --------
-        bool : True als trade binnen risicolimieten valt, anders False
+            float: Volume in lots voor de trade.
+
+        Raises:
+            ValueError: Als essentiële berekeningen ongeldig zijn.
         """
-        # Controleer dagelijks aantal trades
-        self.daily_trades_count += 1
-        if self.daily_trades_count > self.max_daily_trades:
-            self.logger.log_info(f"Maximaal aantal dagelijkse trades bereikt: {self.max_daily_trades}", level="WARNING")
-            return False
+        if not self.is_trading_allowed:
+            return 0.0
 
-        # Als er geen stop loss is, is dit een hoog risico en accepteren we de trade niet
-        if stop_loss == 0:
-            self.logger.log_info(f"Trade geweigerd voor {symbol}: Geen stop loss ingesteld", level="WARNING")
-            return False
+        self._update_daily_state()
 
-        # Berekening potentieel verlies
-        pip_value = 10.0  # Standaard pip waarde voor 1 lot
-        pips_at_risk = abs(entry_price - stop_loss) / 0.0001
+        if self.today_trades >= self.max_trades_per_day:
+            self.logger.warning(f"Max trades vandaag: {self.max_trades_per_day}")
+            return 0.0
 
-        # Pas aan voor goud en indices indien nodig
-        if symbol == "XAUUSD":
-            pips_at_risk = abs(entry_price - stop_loss) / 0.01
-        elif symbol in ["US30", "US30.cash", "US500", "USTEC"]:
-            pips_at_risk = abs(entry_price - stop_loss) / 0.1
+        account_info = self._retry_get_account_info()
+        symbol_info = self._retry_get_symbol_info(symbol)
+        if not account_info or not symbol_info:
+            self.logger.error(f"Kon info niet ophalen voor {symbol}")
+            return 0.0
 
-        potential_loss = pips_at_risk * pip_value * volume
+        account_balance = Decimal(str(account_info["balance"]))
+        risk_amount = account_balance * self.risk_per_trade
 
-        # Controleer tegen dagelijkse verlieslimiet
-        max_daily_loss = self.initial_balance * self.max_daily_drawdown
-        if self.daily_losses + potential_loss > max_daily_loss:
-            self.logger.log_info(f"Trade geweigerd voor {symbol}: Zou dagelijkse verlieslimiet overschrijden",
-                                 level="WARNING")
-            return False
+        if stop_loss is None and risk_pips is None:
+            self.logger.warning(f"Geen stop-loss voor {symbol}, gebruik standaard 2%")
+            risk_pips = entry_price * Decimal("0.02")
+        elif stop_loss is not None and risk_pips is None:
+            risk_pips = abs(entry_price - stop_loss)
 
-        # Extra validatie voor extreem grote posities
-        if volume > 5.0:  # Voorbeeld van een arbitraire limiet
-            self.logger.log_info(f"Trade geweigerd voor {symbol}: Volume te groot ({volume} lots)", level="WARNING")
-            return False
+        if risk_pips is None or risk_pips <= Decimal("0"):
+            self.logger.error(f"Ongeldige risk_pips voor {symbol}: {risk_pips}")
+            return 0.0
 
-        # Trade geaccepteerd
-        return True
+        pip_value = Decimal(str(symbol_info.get("trade_tick_value", "0.0001")))
+        contract_size = Decimal(str(symbol_info.get("trade_contract_size", "100000")))
+        tick_size = Decimal(str(symbol_info.get("trade_tick_size", "0.00001")))
+        points_per_pip = Decimal("0.0001") / tick_size
+        pip_monetary_value = (pip_value * contract_size) / points_per_pip
 
-    def can_trade(self) -> bool:
+        if pip_monetary_value <= Decimal("0"):
+            self.logger.error(f"Ongeldige pip-waarde voor {symbol}")
+            return 0.0
+
+        volume = risk_amount / (risk_pips * pip_monetary_value)
+        volume_step = Decimal(str(symbol_info.get("volume_step", "0.01")))
+        volume = (volume / volume_step).quantize(volume_step) * volume_step
+
+        min_volume = Decimal(str(symbol_info.get("volume_min", "0.01")))
+        max_volume = Decimal(str(symbol_info.get("volume_max", "100.0")))
+        volume = max(min_volume, min(volume, max_volume))
+
+        self.logger.info(f"Berekend volume voor {symbol}: {volume} lots")
+        return float(volume)
+
+    def update_after_trade(self, symbol: str, profit_loss: Decimal, close_time: datetime) -> None:
         """
-        Controleert of trading is toegestaan op basis van huidige limieten
+        Update risk manager statistieken na een afgesloten trade.
+
+        Args:
+            symbol (str): Handelssymbool.
+            profit_loss (Decimal): Winst of verlies van de trade.
+            close_time (datetime): Sluitingstijd van de trade.
+        """
+        trade_date = close_time.date()
+        self.trading_days.add(trade_date)
+
+        if trade_date == datetime.now().date():
+            self.today_pl += profit_loss
+
+        account_info = self._retry_get_account_info()
+        if account_info:
+            current_balance = Decimal(str(account_info["balance"]))
+            if current_balance > self.highest_balance:
+                self.highest_balance = current_balance
+
+        self.logger.info(f"Trade statistieken bijgewerkt: P/L=${profit_loss:.2f}, trading_dagen={len(self.trading_days)}")
+        self._check_trading_allowed()
+
+    def _update_daily_state(self) -> None:
+        """Reset dagelijkse statistieken als een nieuwe dag begint."""
+        today = datetime.now().date()
+        if self.start_date != today:
+            self.today_trades = 0
+            self.today_pl = Decimal("0")
+            self.start_date = today
+            self.logger.info(f"Nieuwe handelsdag gestart: {today}")
+
+    def _check_trading_allowed(self) -> bool:
+        """
+        Controleer of trading is toegestaan volgens FTMO-regels.
 
         Returns:
-        --------
-        bool : True als trading is toegestaan, anders False
+            bool: Geeft aan of trading is toegestaan.
         """
-        # Reset dagelijkse variabelen als het een nieuwe dag is
-        today = date.today()
-        if today != self.current_date:
-            self.daily_losses = 0
-            self.daily_trades_count = 0
-            self.current_date = today
-
-        # Controleer dagelijks aantal trades
-        if self.daily_trades_count >= self.max_daily_trades:
+        account_info = self._retry_get_account_info()
+        if not account_info:
+            self.logger.error("Kon accountinformatie niet ophalen voor controle")
+            self.is_trading_allowed = False
             return False
 
-        return True
+        current_balance = Decimal(str(account_info["balance"]))
 
-    def update_daily_loss(self, loss_amount: float) -> None:
+        daily_drawdown = Decimal("0")
+        if self.initial_balance > Decimal("0"):
+            daily_drawdown = (self.today_pl / self.initial_balance if self.today_pl < Decimal("0") else Decimal("0"))
+
+        total_drawdown = Decimal("0")
+        if self.highest_balance > Decimal("0"):
+            total_drawdown = (self.highest_balance - current_balance) / self.highest_balance
+
+        if daily_drawdown >= self.daily_drawdown_limit:
+            self.logger.warning(f"Dagelijkse drawdown limiet bereikt: {daily_drawdown * 100:.2f}% >= {self.daily_drawdown_limit * 100:.2f}%")
+            self.is_trading_allowed = False
+
+        if total_drawdown >= self.total_drawdown_limit:
+            self.logger.warning(f"Totale drawdown limiet bereikt: {total_drawdown * 100:.2f}% >= {self.total_drawdown_limit * 100:.2f}%")
+            self.is_trading_allowed = False
+
+        if current_balance >= self.initial_balance * (Decimal("1") + self.profit_target):
+            self.logger.info(f"Winstdoel bereikt: ${current_balance:.2f} >= ${self.initial_balance * (Decimal('1') + self.profit_target):.2f}")
+
+        return self.is_trading_allowed
+
+    def get_ftmo_status(self) -> Dict[str, float]:
         """
-        Update het dagelijkse verliestotaal
+        Haal de huidige FTMO challenge status op.
 
-        Parameters:
-        -----------
-        loss_amount : float
-            Verliesbedrag (positief voor verlies, negatief voor winst)
+        Returns:
+            Dict[str, float]: Dictionary met FTMO status informatie.
         """
-        # Reset als het een nieuwe dag is
-        today = date.today()
-        if today != self.current_date:
-            self.daily_losses = 0
-            self.daily_trades_count = 0
-            self.current_date = today
+        account_info = self._retry_get_account_info()
+        if not account_info:
+            return {"error": 0.0}
 
-        # Update dagelijkse verliezen
-        if loss_amount > 0:  # Alleen verliesposities bijhouden
-            self.daily_losses += loss_amount
-            self.logger.log_info(f"Dagelijks verlies bijgewerkt: ${self.daily_losses:.2f} "
-                                 f"(Max: ${self.initial_balance * self.max_daily_drawdown:.2f})")
+        current_balance = Decimal(str(account_info["balance"]))
+        profit_loss = current_balance - self.initial_balance
+        profit_percentage = (profit_loss / self.initial_balance * 100 if self.initial_balance > Decimal("0") else Decimal("0"))
+        daily_drawdown = (abs(self.today_pl / self.initial_balance) * 100 if self.today_pl < Decimal("0") else Decimal("0"))
+        max_balance = max(self.highest_balance, current_balance)
+        total_drawdown = ((max_balance - current_balance) / max_balance * 100 if max_balance > Decimal("0") else Decimal("0"))
+
+        trading_days_count = len(self.trading_days)
+        trading_days_remaining = max(0, self.min_trading_days - trading_days_count)
+
+        return {
+            "initial_balance": float(self.initial_balance),
+            "current_balance": float(current_balance),
+            "profit_loss": float(profit_loss),
+            "profit_percentage": float(profit_percentage),
+            "profit_target_percentage": float(self.profit_target * 100),
+            "profit_target_amount": float(self.initial_balance * self.profit_target),
+            "daily_drawdown": float(daily_drawdown),
+            "daily_drawdown_limit": float(self.daily_drawdown_limit * 100),
+            "total_drawdown": float(total_drawdown),
+            "total_drawdown_limit": float(self.total_drawdown_limit * 100),
+            "trading_days": float(trading_days_count),
+            "min_trading_days": float(self.min_trading_days),
+            "trading_days_remaining": float(trading_days_remaining),
+            "is_trading_allowed": float(int(self.is_trading_allowed))
+        }

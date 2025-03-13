@@ -1,11 +1,30 @@
-# config/strategy_config.json
 {
-"turtle_trader": {
-"entry_period": 40,
-"exit_period": 20,
-"atr_period": 20,
-"atr_multiplier": 2.5,
-"swing_mode": true,
-"use_trend_filter": true
-}
+  "turtle": {
+    "entry_period": 40,
+    "exit_period": 20,
+    "atr_period": 20,
+    "atr_multiplier": 2.5,
+    "swing_mode": true,
+    "use_filters": true,
+    "filter_period": 50,
+    "units": 1
+  },
+  "turtle_swing": {
+    "entry_period": 20,
+    "exit_period": 10,
+    "atr_period": 14,
+    "atr_multiplier": 1.5,
+    "swing_mode": true,
+    "use_filters": true,
+    "filter_period": 50,
+    "units": 1
+  },
+  "dax_opening": {
+    "session_start_hour": 8,
+    "session_start_minute": 0,
+    "breakout_period": 60,
+    "stop_loss_multiplier": 1.5,
+    "take_profit_multiplier": 2.0,
+    "use_filters": true
+  }
 }

@@ -20,9 +20,9 @@ def calculate_atr(df: pd.DataFrame, period: int = 14) -> np.ndarray:
     --------
     np.ndarray : Array met ATR waarden
     """
-    high = df['high'].values
-    low = df['low'].values
-    close = np.roll(df['close'].values, 1)
+    high = df["high"].values
+    low = df["low"].values
+    close = np.roll(df["close"].values, 1)
     close[0] = 0
 
     # Bereken true range componenten
@@ -37,14 +37,16 @@ def calculate_atr(df: pd.DataFrame, period: int = 14) -> np.ndarray:
     atr = np.zeros_like(tr)
     for i in range(len(tr)):
         if i < period:
-            atr[i] = np.mean(tr[0:i + 1]) if i > 0 else tr[0]
+            atr[i] = np.mean(tr[0 : i + 1]) if i > 0 else tr[0]
         else:
-            atr[i] = np.mean(tr[i - period + 1:i + 1])
+            atr[i] = np.mean(tr[i - period + 1 : i + 1])
 
     return atr
 
 
-def calculate_donchian_channel(df: pd.DataFrame, period: int) -> Tuple[np.ndarray, np.ndarray]:
+def calculate_donchian_channel(
+    df: pd.DataFrame, period: int
+) -> Tuple[np.ndarray, np.ndarray]:
     """
     Bereken Donchian Channel met gevectoriseerde operaties
 
@@ -58,5 +60,4 @@ def calculate_donchian_channel(df: pd.DataFrame, period: int) -> Tuple[np.ndarra
     Returns:
     --------
     Tuple[np.ndarray, np.ndarray] : Upper en lower channel waarden
-    """
-    # Implementatie...
+    """  # Implementatie...

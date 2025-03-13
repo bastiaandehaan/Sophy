@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# run.py
 """
 Sophy Trading System - Hoofdscript
 
@@ -20,33 +21,56 @@ def setup_environment():
         sys.path.insert(0, script_dir)
 
     # Maak log directory aan indien nodig
-    log_dir = os.path.join(script_dir, 'logs')
+    log_dir = os.path.join(script_dir, "logs")
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
 
     # Maak data directory aan indien nodig
-    data_dir = os.path.join(script_dir, 'data')
+    data_dir = os.path.join(script_dir, "data")
     if not os.path.exists(data_dir):
         os.makedirs(data_dir)
 
 
 def parse_arguments():
     """Parse command line arguments met uitgebreide opties"""
-    parser = argparse.ArgumentParser(description='Sophy Trading System')
-    parser.add_argument('--config', type=str, help='Pad naar configuratiebestand')
-    parser.add_argument('--mode', type=str, choices=['live', 'backtest', 'paper'],
-                        default='backtest', help='Trading modus (default: backtest)')
-    parser.add_argument('--strategy', type=str, help='Te gebruiken strategie')
-    parser.add_argument('--symbols', type=str, help='Komma-gescheiden lijst van symbolen')
-    parser.add_argument('--interval', type=int, help='Update interval in seconden')
-    parser.add_argument('--initial_balance', type=float, help='Initiële account balans voor backtest')
-    parser.add_argument('--swing', action='store_true', help='Gebruik swing modus voor Turtle strategie')
-    parser.add_argument('--start_date', type=str, help='Startdatum voor backtest (YYYY-MM-DD)')
-    parser.add_argument('--end_date', type=str, help='Einddatum voor backtest (YYYY-MM-DD)')
-    parser.add_argument('--optimize', action='store_true', help='Voer parameteroptimalisatie uit')
-    parser.add_argument('--validate', action='store_true', help='Valideer FTMO compliance')
-    parser.add_argument('--visualize', action='store_true', help='Genereer visualisaties na afloop')
-    parser.add_argument('--verbose', action='store_true', help='Toon gedetailleerde log output')
+    parser = argparse.ArgumentParser(description="Sophy Trading System")
+    parser.add_argument("--config", type=str, help="Pad naar configuratiebestand")
+    parser.add_argument(
+        "--mode",
+        type=str,
+        choices=["live", "backtest", "paper"],
+        default="backtest",
+        help="Trading modus (default: backtest)",
+    )
+    parser.add_argument("--strategy", type=str, help="Te gebruiken strategie")
+    parser.add_argument(
+        "--symbols", type=str, help="Komma-gescheiden lijst van symbolen"
+    )
+    parser.add_argument("--interval", type=int, help="Update interval in seconden")
+    parser.add_argument(
+        "--initial_balance", type=float, help="Initiële account balans voor backtest"
+    )
+    parser.add_argument(
+        "--swing", action="store_true", help="Gebruik swing modus voor Turtle strategie"
+    )
+    parser.add_argument(
+        "--start_date", type=str, help="Startdatum voor backtest (YYYY-MM-DD)"
+    )
+    parser.add_argument(
+        "--end_date", type=str, help="Einddatum voor backtest (YYYY-MM-DD)"
+    )
+    parser.add_argument(
+        "--optimize", action="store_true", help="Voer parameteroptimalisatie uit"
+    )
+    parser.add_argument(
+        "--validate", action="store_true", help="Valideer FTMO compliance"
+    )
+    parser.add_argument(
+        "--visualize", action="store_true", help="Genereer visualisaties na afloop"
+    )
+    parser.add_argument(
+        "--verbose", action="store_true", help="Toon gedetailleerde log output"
+    )
 
     return parser.parse_args()
 
@@ -66,7 +90,7 @@ def create_logger(config):
     """Maak logger instance gebaseerd op configuratie"""
     from src.utils.logger import Logger
 
-    log_file = config['logging'].get('log_file', 'logs/trading_log.csv')
+    log_file = config["logging"].get("log_file", "logs/trading_log.csv")
     return Logger(log_file)
 
 
@@ -75,28 +99,30 @@ def run_backtest(config, args, logger):
     print(f"Starten in backtest modus - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
     try:
-        from src.analysis.backtester import run_backtest
+        from src.analysis.advanced_backtester import run_backtest
 
         # Override config met command line argumenten
         if args.symbols:
-            config['mt5']['symbols'] = args.symbols.split(',')
+            config["mt5"]["symbols"] = args.symbols.split(",")
         if args.initial_balance:
-            config['mt5']['account_balance'] = args.initial_balance
+            config["mt5"]["account_balance"] = args.initial_balance
         if args.strategy:
-            config['strategy']['name'] = args.strategy
+            config["strategy"]["name"] = args.strategy
         if args.swing:
-            config['strategy']['swing_mode'] = True
+            config["strategy"]["swing_mode"] = True
         if args.start_date or args.end_date:
-            if 'backtest' not in config:
-                config['backtest'] = {}
+            if "backtest" not in config:
+                config["backtest"] = {}
             if args.start_date:
-                config['backtest']['start_date'] = args.start_date
+                config["backtest"]["start_date"] = args.start_date
             if args.end_date:
-                config['backtest']['end_date'] = args.end_date
+                config["backtest"]["end_date"] = args.end_date
 
         # Log configuratie
-        logger.log_info(f"Backtest configuratie: strategie={config['strategy']['name']}, "
-                        f"symbolen={config['mt5']['symbols']}")
+        logger.log_info(
+            f"Backtest configuratie: strategie={config['strategy']['name']}, "
+            f"symbolen={config['mt5']['symbols']}"
+        )
 
         # Voer backtest uit
         run_backtest()
@@ -104,6 +130,7 @@ def run_backtest(config, args, logger):
         # Voer FTMO validatie uit indien gewenst
         if args.validate:
             from src.ftmo.ftmo_validator import FTMOValidator
+
             validator = FTMOValidator(config, logger.log_file, logger=logger)
             validator.generate_trading_report()
             logger.log_info("FTMO validatie rapport gegenereerd")
@@ -111,6 +138,7 @@ def run_backtest(config, args, logger):
         # Genereer visualisaties indien gewenst
         if args.visualize:
             from src.utils.visualizer import Visualizer
+
             visualizer = Visualizer(logger.log_file)
             visualizer.plot_equity_curve()
             visualizer.plot_trade_results()
@@ -129,7 +157,9 @@ def run_backtest(config, args, logger):
 
 def run_live_trading(config, args, logger):
     """Start live trading met opgegeven configuratie"""
-    print(f"Starten in live trading modus - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(
+        f"Starten in live trading modus - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+    )
 
     try:
         from src.connector.mt5_connector import MT5Connector
@@ -138,21 +168,23 @@ def run_live_trading(config, args, logger):
 
         # Override config met command line argumenten
         if args.symbols:
-            config['mt5']['symbols'] = args.symbols.split(',')
+            config["mt5"]["symbols"] = args.symbols.split(",")
         if args.strategy:
-            config['strategy']['name'] = args.strategy
+            config["strategy"]["name"] = args.strategy
         if args.swing:
-            config['strategy']['swing_mode'] = True
+            config["strategy"]["swing_mode"] = True
         if args.interval:
-            config['interval'] = args.interval
+            config["interval"] = args.interval
 
         # Log configuratie
-        logger.log_info(f"Live trading configuratie: strategie={config['strategy']['name']}, "
-                        f"symbolen={config['mt5']['symbols']}")
+        logger.log_info(
+            f"Live trading configuratie: strategie={config['strategy']['name']}, "
+            f"symbolen={config['mt5']['symbols']}"
+        )
 
         # Maak componenten aan
-        connector = MT5Connector(config['mt5'], logger)
-        risk_manager = RiskManager(config['risk'], logger)
+        connector = MT5Connector(config["mt5"], logger)
+        risk_manager = RiskManager(config["risk"], logger)
 
         # Maak verbinding met MT5
         if not connector.connect():
@@ -160,13 +192,15 @@ def run_live_trading(config, args, logger):
             return False
 
         # Creëer strategie
-        strategy_name = config['strategy']['name']
+        strategy_name = config["strategy"]["name"]
         try:
             strategy = StrategyFactory.create_strategy(
                 strategy_name, connector, risk_manager, logger, config
             )
         except ValueError as e:
-            logger.log_info(f"Kan strategie '{strategy_name}' niet maken: {e}", level="ERROR")
+            logger.log_info(
+                f"Kan strategie '{strategy_name}' niet maken: {e}", level="ERROR"
+            )
             connector.disconnect()
             return False
 
@@ -177,15 +211,15 @@ def run_live_trading(config, args, logger):
         while not stop_trading:
             try:
                 # Verwerk alle symbolen
-                for symbol in config['mt5']['symbols']:
+                for symbol in config["mt5"]["symbols"]:
                     # Pas symbol mapping toe indien nodig
-                    symbol_map = config['mt5'].get('symbol_mapping', {})
+                    symbol_map = config["mt5"].get("symbol_mapping", {})
                     mapped_symbol = symbol_map.get(symbol, symbol)
 
                     # Verwerk symbool volgens strategie
                     result = strategy.process_symbol(mapped_symbol)
 
-                    if result.get('signal'):
+                    if result.get("signal"):
                         logger.log_info(
                             f"Signaal voor {mapped_symbol}: {result['signal']} {result.get('action', '')}"
                         )
@@ -201,7 +235,7 @@ def run_live_trading(config, args, logger):
                     break
 
                 # Wacht tot volgende cyclus
-                interval = config.get('interval', 300)  # Default 5 minuten
+                interval = config.get("interval", 300)  # Default 5 minuten
                 logger.log_info(f"Wacht {interval} seconden tot volgende cyclus")
                 time.sleep(interval)
 
@@ -251,16 +285,18 @@ def main():
     # Bepaal modus en start juiste functie
     mode = args.mode.lower()
 
-    if mode == 'backtest':
+    if mode == "backtest":
         success = run_backtest(config, args, logger)
-    elif mode in ('live', 'paper'):
+    elif mode in ("live", "paper"):
         success = run_live_trading(config, args, logger)
     else:
         logger.log_info(f"Onbekende modus: {mode}", level="ERROR")
         success = False
 
     # Afsluiten
-    logger.log_info(f"Sophy Trading System afgesloten - Status: {'Succes' if success else 'Fout'}")
+    logger.log_info(
+        f"Sophy Trading System afgesloten - Status: {'Succes' if success else 'Fout'}"
+    )
     sys.exit(0 if success else 1)
 
 
