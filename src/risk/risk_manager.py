@@ -1,12 +1,13 @@
 # src/risk/risk_manager.py
-from datetime import datetime
-from typing import Dict, Optional, Any, Set
-from decimal import Decimal, getcontext, InvalidOperation
-import time
 import random
+import time
+from datetime import datetime
+from decimal import Decimal, getcontext, InvalidOperation
+from typing import Dict, Optional, Any, Set
 
 from src.connector.mt5_connector import MT5Connector
 from src.utils.logger import Logger
+
 
 class RiskManager:
     """
@@ -18,7 +19,9 @@ class RiskManager:
     3. Bepaalt of trading mag doorgaan op basis van risicoparameters.
     """
 
-    def __init__(self, config: Dict, logger: Logger, mt5_connector: MT5Connector) -> None:
+    def __init__(
+        self, config: Dict, logger: Logger, mt5_connector: MT5Connector
+    ) -> None:
         """
         Initialiseer de risicomanager.
 
@@ -34,16 +37,26 @@ class RiskManager:
         getcontext().prec = 12
 
         # Algemene risicoparameters
-        self.risk_per_trade = Decimal(str(config.get("risk_per_trade", "0.01")))  # 1% risico per trade
+        self.risk_per_trade = Decimal(
+            str(config.get("risk_per_trade", "0.01"))
+        )  # 1% risico per trade
         self.max_trades_per_day = config.get("max_trades_per_day", 5)
         self.max_trades_per_symbol = config.get("max_trades_per_symbol", 1)
 
         # FTMO-specifieke parameters
         self.initial_balance = Decimal("0")  # Wordt ingesteld tijdens initialisatie
-        self.daily_drawdown_limit = Decimal(str(config.get("daily_drawdown_limit", "0.05")))  # 5% max dagelijks verlies
-        self.total_drawdown_limit = Decimal(str(config.get("total_drawdown_limit", "0.10")))  # 10% max totaal verlies
-        self.profit_target = Decimal(str(config.get("profit_target", "0.10")))  # 10% winstdoel
-        self.min_trading_days = config.get("min_trading_days", 4)  # Min. 4 dagen met trades
+        self.daily_drawdown_limit = Decimal(
+            str(config.get("daily_drawdown_limit", "0.05"))
+        )  # 5% max dagelijks verlies
+        self.total_drawdown_limit = Decimal(
+            str(config.get("total_drawdown_limit", "0.10"))
+        )  # 10% max totaal verlies
+        self.profit_target = Decimal(
+            str(config.get("profit_target", "0.10"))
+        )  # 10% winstdoel
+        self.min_trading_days = config.get(
+            "min_trading_days", 4
+        )  # Min. 4 dagen met trades
 
         # State bijhouden
         self.today_trades = 0
@@ -75,13 +88,17 @@ class RiskManager:
         if account_info:
             self.initial_balance = Decimal(str(account_info["balance"]))
             self.highest_balance = self.initial_balance
-            self.logger.info(f"RiskManager geïnitialiseerd met saldo: {self.initial_balance}")
+            self.logger.info(
+                f"RiskManager geïnitialiseerd met saldo: {self.initial_balance}"
+            )
         else:
             self.logger.error("Kon accountinformatie niet ophalen na meerdere pogingen")
             self.is_trading_allowed = False
             raise RuntimeError("RiskManager initialisatie mislukt")
 
-    def _retry_get_account_info(self, retries: int = 3, delay: float = 1.0, max_wait: float = 10.0) -> Optional[Dict[str, float]]:
+    def _retry_get_account_info(
+        self, retries: int = 3, delay: float = 1.0, max_wait: float = 10.0
+    ) -> Optional[Dict[str, float]]:
         """
         Probeer accountinformatie op te halen met retries.
 
@@ -110,7 +127,9 @@ class RiskManager:
         self.logger.error("Kon accountinformatie niet ophalen na meerdere pogingen")
         return None
 
-    def _retry_get_symbol_info(self, symbol: str, retries: int = 3, delay: float = 1.0, max_wait: float = 10.0) -> Optional[Dict[str, Any]]:
+    def _retry_get_symbol_info(
+        self, symbol: str, retries: int = 3, delay: float = 1.0, max_wait: float = 10.0
+    ) -> Optional[Dict[str, Any]]:
         """
         Probeer symboolinformatie op te halen met retries.
 
@@ -211,7 +230,9 @@ class RiskManager:
         self.logger.info(f"Berekend volume voor {symbol}: {volume} lots")
         return float(volume)
 
-    def update_after_trade(self, symbol: str, profit_loss: Decimal, close_time: datetime) -> None:
+    def update_after_trade(
+        self, symbol: str, profit_loss: Decimal, close_time: datetime
+    ) -> None:
         """
         Update risk manager statistieken na een afgesloten trade.
 
@@ -232,7 +253,9 @@ class RiskManager:
             if current_balance > self.highest_balance:
                 self.highest_balance = current_balance
 
-        self.logger.info(f"Trade statistieken bijgewerkt: P/L=${profit_loss:.2f}, trading_dagen={len(self.trading_days)}")
+        self.logger.info(
+            f"Trade statistieken bijgewerkt: P/L=${profit_loss:.2f}, trading_dagen={len(self.trading_days)}"
+        )
         self._check_trading_allowed()
 
     def _update_daily_state(self) -> None:
@@ -261,22 +284,36 @@ class RiskManager:
 
         daily_drawdown = Decimal("0")
         if self.initial_balance > Decimal("0"):
-            daily_drawdown = (self.today_pl / self.initial_balance if self.today_pl < Decimal("0") else Decimal("0"))
+            daily_drawdown = (
+                self.today_pl / self.initial_balance
+                if self.today_pl < Decimal("0")
+                else Decimal("0")
+            )
 
         total_drawdown = Decimal("0")
         if self.highest_balance > Decimal("0"):
-            total_drawdown = (self.highest_balance - current_balance) / self.highest_balance
+            total_drawdown = (
+                self.highest_balance - current_balance
+            ) / self.highest_balance
 
         if daily_drawdown >= self.daily_drawdown_limit:
-            self.logger.warning(f"Dagelijkse drawdown limiet bereikt: {daily_drawdown * 100:.2f}% >= {self.daily_drawdown_limit * 100:.2f}%")
+            self.logger.warning(
+                f"Dagelijkse drawdown limiet bereikt: {daily_drawdown * 100:.2f}% >= {self.daily_drawdown_limit * 100:.2f}%"
+            )
             self.is_trading_allowed = False
 
         if total_drawdown >= self.total_drawdown_limit:
-            self.logger.warning(f"Totale drawdown limiet bereikt: {total_drawdown * 100:.2f}% >= {self.total_drawdown_limit * 100:.2f}%")
+            self.logger.warning(
+                f"Totale drawdown limiet bereikt: {total_drawdown * 100:.2f}% >= {self.total_drawdown_limit * 100:.2f}%"
+            )
             self.is_trading_allowed = False
 
-        if current_balance >= self.initial_balance * (Decimal("1") + self.profit_target):
-            self.logger.info(f"Winstdoel bereikt: ${current_balance:.2f} >= ${self.initial_balance * (Decimal('1') + self.profit_target):.2f}")
+        if current_balance >= self.initial_balance * (
+            Decimal("1") + self.profit_target
+        ):
+            self.logger.info(
+                f"Winstdoel bereikt: ${current_balance:.2f} >= ${self.initial_balance * (Decimal('1') + self.profit_target):.2f}"
+            )
 
         return self.is_trading_allowed
 
@@ -293,10 +330,22 @@ class RiskManager:
 
         current_balance = Decimal(str(account_info["balance"]))
         profit_loss = current_balance - self.initial_balance
-        profit_percentage = (profit_loss / self.initial_balance * 100 if self.initial_balance > Decimal("0") else Decimal("0"))
-        daily_drawdown = (abs(self.today_pl / self.initial_balance) * 100 if self.today_pl < Decimal("0") else Decimal("0"))
+        profit_percentage = (
+            profit_loss / self.initial_balance * 100
+            if self.initial_balance > Decimal("0")
+            else Decimal("0")
+        )
+        daily_drawdown = (
+            abs(self.today_pl / self.initial_balance) * 100
+            if self.today_pl < Decimal("0")
+            else Decimal("0")
+        )
         max_balance = max(self.highest_balance, current_balance)
-        total_drawdown = ((max_balance - current_balance) / max_balance * 100 if max_balance > Decimal("0") else Decimal("0"))
+        total_drawdown = (
+            (max_balance - current_balance) / max_balance * 100
+            if max_balance > Decimal("0")
+            else Decimal("0")
+        )
 
         trading_days_count = len(self.trading_days)
         trading_days_remaining = max(0, self.min_trading_days - trading_days_count)
@@ -315,5 +364,5 @@ class RiskManager:
             "trading_days": float(trading_days_count),
             "min_trading_days": float(self.min_trading_days),
             "trading_days_remaining": float(trading_days_remaining),
-            "is_trading_allowed": float(int(self.is_trading_allowed))
+            "is_trading_allowed": float(int(self.is_trading_allowed)),
         }

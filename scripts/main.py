@@ -9,8 +9,8 @@ import time
 from datetime import datetime
 
 import pandas as pd
-
 from src.analysis.advanced_backtester import BackTester
+
 from src.connector.mt5_connector import MT5Connector
 from src.ftmo.ftmo_validator import FTMOValidator
 from src.risk.risk_manager import RiskManager

@@ -2,9 +2,9 @@
 from datetime import datetime, timedelta
 
 import pytest
-from src.utils.config import load_config
 
 from src.connector.mt5_connector import MT5Connector
+from src.utils.config import load_config
 
 
 @pytest.fixture

@@ -7,12 +7,10 @@ Genereert een gestructureerd document met projectarchitectuur en codeoverzicht
 Geoptimaliseerd voor beperkte uitvoergrootte
 """
 
-import os
-import glob
 import datetime
+import glob
+import os
 import re
-import subprocess
-from pathlib import Path
 
 # Configuratie
 LOCAL_DIR = r"C:\Users\basti\PycharmProjects\Sophy"

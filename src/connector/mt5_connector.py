@@ -1,8 +1,10 @@
 # src/connector/mt5_connector.py
 import time
 from typing import Dict, List, Optional, Any
+
 import MetaTrader5 as mt5
 import pandas as pd
+
 
 class MT5Connector:
     """Verzorgt alle interacties met het MetaTrader 5 platform"""
@@ -20,10 +22,15 @@ class MT5Connector:
         self.connected = False
         self._initialize_error_messages()
         self.timeframe_map = {
-            'M1': mt5.TIMEFRAME_M1, 'M5': mt5.TIMEFRAME_M5,
-            'M15': mt5.TIMEFRAME_M15, 'M30': mt5.TIMEFRAME_M30, 'H1': mt5.TIMEFRAME_H1,
-            'H4': mt5.TIMEFRAME_H4, 'D1': mt5.TIMEFRAME_D1, 'W1': mt5.TIMEFRAME_W1,
-            'MN1': mt5.TIMEFRAME_MN1
+            "M1": mt5.TIMEFRAME_M1,
+            "M5": mt5.TIMEFRAME_M5,
+            "M15": mt5.TIMEFRAME_M15,
+            "M30": mt5.TIMEFRAME_M30,
+            "H1": mt5.TIMEFRAME_H1,
+            "H4": mt5.TIMEFRAME_H4,
+            "D1": mt5.TIMEFRAME_D1,
+            "W1": mt5.TIMEFRAME_W1,
+            "MN1": mt5.TIMEFRAME_MN1,
         }
 
     def _initialize_error_messages(self) -> None:
@@ -34,7 +41,7 @@ class MT5Connector:
             10015: "Verkeerde server opgegeven",
             10016: "MT5 niet geïnstalleerd of niet gevonden",
             10018: "Verbinding met de server mislukt",
-            10019: "Geen respons van server"
+            10019: "Geen respons van server",
         }
 
     def connect(self) -> bool:
@@ -54,19 +61,20 @@ class MT5Connector:
             f"Verbinden met MT5 op pad: {self.config.get('mt5_pathway', 'standaard pad')}"
         )
         init_result = mt5.initialize(
-            path=self.config.get('mt5_pathway'),
-            login=self.config.get('login'),
-            password=self.config.get('password'),
-            server=self.config.get('server')
+            path=self.config.get("mt5_pathway"),
+            login=self.config.get("login"),
+            password=self.config.get("password"),
+            server=self.config.get("server"),
         )
 
         if not init_result:
             error_code = mt5.last_error()
             error_message = self.error_messages.get(
-                error_code,
-                f"Onbekende MT5 error: {error_code}"
+                error_code, f"Onbekende MT5 error: {error_code}"
             )
-            self.logger.log_info(f"MT5 initialisatie mislukt: {error_message}", level="ERROR")
+            self.logger.log_info(
+                f"MT5 initialisatie mislukt: {error_message}", level="ERROR"
+            )
             return False
 
         if not mt5.terminal_info():
@@ -109,13 +117,17 @@ class MT5Connector:
             return {}
 
         return {
-            'login': float(account_info.login),
-            'balance': account_info.balance,
-            'equity': account_info.equity,
-            'margin': account_info.margin,
-            'free_margin': account_info.margin_free,
-            'profit': account_info.profit,
-            'margin_level': (account_info.equity / account_info.margin * 100 if account_info.margin > 0 else 0.0)
+            "login": float(account_info.login),
+            "balance": account_info.balance,
+            "equity": account_info.equity,
+            "margin": account_info.margin,
+            "free_margin": account_info.margin_free,
+            "profit": account_info.profit,
+            "margin_level": (
+                account_info.equity / account_info.margin * 100
+                if account_info.margin > 0
+                else 0.0
+            ),
         }
 
     def get_timeframe_constant(self, timeframe_str: str) -> int:
@@ -136,8 +148,9 @@ class MT5Connector:
             raise ValueError(f"Ongeldige timeframe: {timeframe_str}")
         return timeframe
 
-    def get_historical_data(self, symbol: str, timeframe_or_str: Any,
-                            bars_count: int = 100) -> pd.DataFrame:
+    def get_historical_data(
+        self, symbol: str, timeframe_or_str: Any, bars_count: int = 100
+    ) -> pd.DataFrame:
         """
         Haal historische prijsdata op met geoptimaliseerde verwerking.
 
@@ -171,14 +184,14 @@ class MT5Connector:
         if rates is None or len(rates) == 0:
             self.logger.log_info(
                 f"Kon geen historische data ophalen voor {symbol} na {retries} pogingen",
-                level="ERROR"
+                level="ERROR",
             )
             return pd.DataFrame()
 
         df = pd.DataFrame(rates)
-        df['time'] = pd.to_datetime(df['time'], unit='s')
+        df["time"] = pd.to_datetime(df["time"], unit="s")
         df.columns = [col.lower() for col in df.columns]  # Correcte kolomnamen
-        df.rename(columns={'time': 'date'}, inplace=True)
+        df.rename(columns={"time": "date"}, inplace=True)
         return df
 
     def get_symbol_tick(self, symbol: str) -> Optional[mt5.Tick]:
@@ -200,7 +213,7 @@ class MT5Connector:
             error_code = mt5.last_error()
             self.logger.log_info(
                 f"Kon geen tick informatie ophalen voor {symbol}. Error: {error_code}",
-                level="ERROR"
+                level="ERROR",
             )
             return None
         return tick
@@ -224,12 +237,21 @@ class MT5Connector:
             error_code = mt5.last_error()
             if error_code == 0:
                 return []
-            self.logger.log_info(f"Kon geen posities ophalen. Error: {error_code}", level="ERROR")
+            self.logger.log_info(
+                f"Kon geen posities ophalen. Error: {error_code}", level="ERROR"
+            )
             return []
         return list(positions)
 
-    def place_order(self, action: str, symbol: str, volume: float, stop_loss: float = 0,
-                    take_profit: float = 0, comment: str = "") -> Optional[int]:
+    def place_order(
+        self,
+        action: str,
+        symbol: str,
+        volume: float,
+        stop_loss: float = 0,
+        take_profit: float = 0,
+        comment: str = "",
+    ) -> Optional[int]:
         """
         Plaats een order op het MT5 platform.
 
@@ -250,22 +272,32 @@ class MT5Connector:
 
         symbol_info = mt5.symbol_info(symbol)
         if symbol_info is None:
-            self.logger.log_info(f"Kon geen informatie krijgen voor symbool {symbol}", level="ERROR")
+            self.logger.log_info(
+                f"Kon geen informatie krijgen voor symbool {symbol}", level="ERROR"
+            )
             return None
 
         if not symbol_info.visible or not symbol_info.trade_allowed:
-            self.logger.log_info(f"Trading niet toegestaan voor {symbol}", level="ERROR")
+            self.logger.log_info(
+                f"Trading niet toegestaan voor {symbol}", level="ERROR"
+            )
             return None
 
         tick = mt5.symbol_info_tick(symbol)
         if tick is None:
-            self.logger.log_info(f"Kon geen tick informatie ophalen voor {symbol}", level="ERROR")
+            self.logger.log_info(
+                f"Kon geen tick informatie ophalen voor {symbol}", level="ERROR"
+            )
             return None
 
-        order_type = mt5.ORDER_TYPE_BUY if action == "BUY" else (
-            mt5.ORDER_TYPE_SELL if action == "SELL" else None
+        order_type = (
+            mt5.ORDER_TYPE_BUY
+            if action == "BUY"
+            else (mt5.ORDER_TYPE_SELL if action == "SELL" else None)
         )
-        price = tick.ask if action == "BUY" else (tick.bid if action == "SELL" else None)
+        price = (
+            tick.ask if action == "BUY" else (tick.bid if action == "SELL" else None)
+        )
         if order_type is None or price is None:
             self.logger.log_info(f"Ongeldige actie: {action}", level="ERROR")
             return None
@@ -282,7 +314,7 @@ class MT5Connector:
             "magic": 123456,
             "comment": comment,
             "type_time": mt5.ORDER_TIME_GTC,
-            "type_filling": mt5.ORDER_FILLING_FOK
+            "type_filling": mt5.ORDER_FILLING_FOK,
         }
 
         self.logger.log_info(
@@ -292,7 +324,9 @@ class MT5Connector:
 
         if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
             error_code = mt5.last_error()
-            self.logger.log_info(f"Order verzenden mislukt. Error code: {error_code}", level="ERROR")
+            self.logger.log_info(
+                f"Order verzenden mislukt. Error code: {error_code}", level="ERROR"
+            )
             return None
 
         self.logger.log_info(f"Order succesvol geplaatst. Ticket: {result.order}")
