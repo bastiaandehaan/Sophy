@@ -1,6 +1,6 @@
 # src/connector/mt5_connector.py
 import time
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Union
 
 import MetaTrader5 as mt5
 import pandas as pd
@@ -17,11 +17,11 @@ class MT5Connector:
             config (Dict[str, Any]): Configuratie dictionary met MT5 connectie parameters.
             logger (Any): Logger instance voor het registreren van gebeurtenissen.
         """
-        self.config = config
-        self.logger = logger
-        self.connected = False
+        self.config: Dict[str, Any] = config
+        self.logger: Any = logger
+        self.connected: bool = False
         self._initialize_error_messages()
-        self.timeframe_map = {
+        self.timeframe_map: Dict[str, int] = {
             "M1": mt5.TIMEFRAME_M1,
             "M5": mt5.TIMEFRAME_M5,
             "M15": mt5.TIMEFRAME_M15,
@@ -149,14 +149,14 @@ class MT5Connector:
         return timeframe
 
     def get_historical_data(
-        self, symbol: str, timeframe_or_str: Any, bars_count: int = 100
+        self, symbol: str, timeframe_or_str: Union[str, int], bars_count: int = 100
     ) -> pd.DataFrame:
         """
         Haal historische prijsdata op met geoptimaliseerde verwerking.
 
         Args:
             symbol (str): Handelssymbool.
-            timeframe_or_str (Any): MT5 timeframe constante of string ('H4', etc.).
+            timeframe_or_str (Union[str, int]): MT5 timeframe constante of string ('H4', etc.).
             bars_count (int): Aantal bars om op te halen.
 
         Returns:
