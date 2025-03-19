@@ -13,7 +13,9 @@ import os
 import re
 
 # Configuratie
-LOCAL_DIR = r"C:\Users\basti\PycharmProjects\Sophy"
+import os
+USER_HOME = os.path.expanduser("~")
+LOCAL_DIR = os.path.join(USER_HOME, "PycharmProjects", "Sophy")
 REPO_NAME = "Sophy"
 OUTPUT_FILE = f"{REPO_NAME}_local_context.txt"
 

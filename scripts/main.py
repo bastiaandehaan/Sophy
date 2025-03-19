@@ -9,7 +9,8 @@ import time
 from datetime import datetime
 
 import pandas as pd
-from src.analysis.advanced_backtester import BackTester
+# Gewijzigd: Gebruik de bestaande backtrader_integration in plaats van advanced_backtester
+from src.analysis.backtrader_integration import BacktestingManager
 
 from src.connector.mt5_connector import MT5Connector
 from src.ftmo.ftmo_validator import FTMOValidator
@@ -135,7 +136,7 @@ def setup_trading_environment(args):
     # Initialiseer backtester (alleen voor backtest)
     backtester = None
     if args.mode == "backtest":
-        backtester = BackTester(config, logger)
+        backtester = BacktestingManager(config, logger)
 
     # Initialiseer FTMO validator
     ftmo_validator = FTMOValidator(config, logger)
@@ -364,28 +365,43 @@ def run_backtest(args, environment):
                 continue
 
         # Run de backtest
-        backtest_results = backtester.run(symbol, data, visualize=True)
+        backtest_results = backtester.run_backtest(
+            strategy_name=args.strategy,
+            symbols=[symbol],
+            start_date=args.start_date,
+            end_date=args.end_date,
+            timeframe=args.timeframe,
+            plot_results=True
+        )
 
         # Log resultaten
         logger.info(f"Backtest resultaten voor {symbol}:")
-        logger.info(f"  - Eindbalans: ${backtest_results['final_balance']:.2f}")
+        logger.info(f"  - Eindbalans: ${backtest_results.get('final_balance', 0):.2f}")
         logger.info(
-            f"  - Winst/Verlies: ${backtest_results['profit_loss']:.2f} ({backtest_results['profit_percentage']:.2f}%)"
+            f"  - Winst/Verlies: ${backtest_results.get('profit_loss', 0):.2f} ({backtest_results.get('profit_percentage', 0):.2f}%)"
         )
-        logger.info(f"  - Totaal trades: {backtest_results['total_trades']}")
-        logger.info(
-            f"  - Win rate: {backtest_results['performance_stats']['win_rate'] * 100:.2f}%"
-        )
-        logger.info(
-            f"  - Max drawdown: {abs(backtest_results['performance_stats']['max_drawdown']):.2f}%"
-        )
+        logger.info(f"  - Totaal trades: {backtest_results.get('total_trades', 0)}")
+
+        win_rate = backtest_results.get('performance_stats', {}).get('win_rate', 0)
+        if win_rate is not None:
+            logger.info(f"  - Win rate: {win_rate * 100:.2f}%")
+
+        max_drawdown = backtest_results.get('performance_stats', {}).get('max_drawdown',
+                                                                         0)
+        if max_drawdown is not None:
+            logger.info(f"  - Max drawdown: {abs(max_drawdown):.2f}%")
 
         # Controlleer FTMO compliance
-        ftmo_compliance = backtest_results["ftmo_compliance"]
-        logger.info(f"FTMO Compliance: {ftmo_compliance['is_compliant']}")
+        ftmo_compliance = backtest_results.get("ftmo_compliance",
+                                               {"is_compliant": False})
+        logger.info(f"FTMO Compliance: {ftmo_compliance.get('is_compliant', False)}")
 
-        if not ftmo_compliance["is_compliant"] and ftmo_compliance["reason"]:
-            for reason in ftmo_compliance["reason"]:
+        if not ftmo_compliance.get("is_compliant", False) and ftmo_compliance.get(
+            "reason"):
+            reasons = ftmo_compliance.get("reason", [])
+            if isinstance(reasons, str):
+                reasons = [reasons]
+            for reason in reasons:
                 logger.warning(f"  - {reason}")
 
         # Bewaar resultaten
@@ -394,7 +410,7 @@ def run_backtest(args, environment):
     # Genereer samenvattingsrapport
     summary_file = os.path.join(results_dir, "backtest_summary.json")
     with open(summary_file, "w") as f:
-        json.dump(all_results, f, indent=4)
+        json.dump(all_results, f, indent=4, default=str)
 
     logger.info(f"Backtest samenvatting opgeslagen in {summary_file}")
     logger.info("Backtest voltooid")

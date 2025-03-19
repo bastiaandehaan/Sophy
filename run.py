@@ -99,7 +99,8 @@ def run_backtest(config, args, logger):
     print(f"Starten in backtest modus - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
     try:
-        from src.analysis.advanced_backtester import run_backtest
+        # Gewijzigd: Import de correcte bestaande backtest module
+        from src.analysis.backtrader_integration import BacktestingManager
 
         # Override config met command line argumenten
         if args.symbols:
@@ -124,8 +125,27 @@ def run_backtest(config, args, logger):
             f"symbolen={config['mt5']['symbols']}"
         )
 
+        # Maak backtesting manager en voer backtest uit
+        btm = BacktestingManager(config, logger)
+
+        # Bepaal parameters voor backtest
+        strategy_name = config['strategy']['name']
+        symbols = config['mt5']['symbols']
+        timeframe = config.get('timeframe',
+                               config.get('mt5', {}).get('timeframe', 'D1'))
+        start_date = config.get('backtest', {}).get('start_date', '2020-01-01')
+        end_date = config.get('backtest', {}).get('end_date',
+                                                  datetime.now().strftime('%Y-%m-%d'))
+
         # Voer backtest uit
-        run_backtest()
+        results = btm.run_backtest(
+            strategy_name=strategy_name,
+            symbols=symbols,
+            start_date=start_date,
+            end_date=end_date,
+            timeframe=timeframe,
+            plot_results=args.visualize
+        )
 
         # Voer FTMO validatie uit indien gewenst
         if args.validate:
@@ -184,7 +204,7 @@ def run_live_trading(config, args, logger):
 
         # Maak componenten aan
         connector = MT5Connector(config["mt5"], logger)
-        risk_manager = RiskManager(config["risk"], logger)
+        risk_manager = RiskManager(config["risk"], logger, connector)
 
         # Maak verbinding met MT5
         if not connector.connect():
