@@ -1,360 +1,529 @@
-# src/strategy/turtle_strategy.py
-from typing import Dict, List, Optional, Any
+# src/analysis/backtrader_integration.py
+import os
+from datetime import datetime
+from typing import Dict, List, Any
 
 import pandas as pd
 
-from src.strategy.base_strategy import Strategy
-from src.utils.indicators import calculate_atr
 
-
-class TurtleStrategy(Strategy):
+class BacktestingManager:
     """
-    Implementatie van de klassieke Turtle Trading strategie als onderdeel van het Sophy framework.
-
-    De strategie gebruikt breakouts van donchian channels voor entry en exits,
-    gecombineerd met ATR voor positiegrootte en risicobeheer.
+    Integration manager for Backtrader backtesting in the Sophy framework.
     """
 
-    def __init__(self, connector, risk_manager, logger, config: Dict = None):
+    def __init__(self, config: Dict[str, Any], logger):
         """
-        Initialiseer de Turtle Trading strategie.
+        Initialize the backtesting manager.
 
         Args:
-            connector: MT5 connector instantie
-            risk_manager: Risk manager instantie
-            logger: Logger instantie voor het loggen van strategie acties
-            config: Configuratie dictionary met strategie parameters
+            config: Configuration dictionary
+            logger: Logger instance
         """
-        super().__init__(connector, risk_manager, logger, config)
+        self.config = config
+        self.logger = logger
 
-        if config is None:
-            config = {}
+        # Initialize Backtrader adapter
+        from src.analysis.backtrader_adapter import BacktraderAdapter
 
-        self.name = "Turtle Trading Strategy"
+        self.backtrader_adapter = BacktraderAdapter(config, logger)
 
-        # Haal strategie-specifieke configuratie op
-        strategy_config = config.get("strategy", {})
-
-        # Turtle specifieke parameters
-        self.entry_period = strategy_config.get("entry_period",
-            20)  # Klassieke waarde: 20-dagen breakout
-        self.exit_period = strategy_config.get("exit_period",
-            10)  # Klassieke waarde: 10-dagen breakout
-        self.atr_period = strategy_config.get("atr_period",
-            14)  # ATR berekening periode
-        self.atr_multiplier = strategy_config.get("atr_multiplier",
-            2.0)  # N-voud van ATR voor stops
-        self.units = strategy_config.get("units",
-            1)  # Aantal te nemen units (in originele strategie: 1 tot 4)
-        self.use_filters = strategy_config.get("use_filters",
-            True)  # Gebruik trendfilters
-        self.filter_period = strategy_config.get("filter_period",
-            50)  # Periode voor trendfilter
-
-        # Swing trading modus (optioneel, voor turtle_swing variant)
-        self.swing_mode = strategy_config.get("swing_mode", False)
-
-        # Voor het bijhouden van posities en staten
-        self.positions = {}  # Bijhouden van open posities per symbool
-        self.last_breakout_prices = {}  # Laatste breakout niveau per symbool
-
-        self.logger.info(f"Turtle Strategy geïnitialiseerd: entry={self.entry_period}, "
-                         f"exit={self.exit_period}, ATR={self.atr_period}, "
-                         f"multiplier={self.atr_multiplier}, units={self.units}, "
-                         f"swing_mode={self.swing_mode}")
-
-    def process_symbol(self, symbol: str) -> Dict[str, Any]:
+    def run_backtest(self, strategy_name: str, symbols: List[str], start_date: str,
+                     end_date: str, timeframe: str = "D1", parameters: Dict = None,
+                     plot_results: bool = True, ) -> Dict[str, Any]:
         """
-        Verwerk een symbool volgens de Turtle Trading regels.
-
-        Deze methode haalt historische data op en genereert handelssignalen.
+        Run a backtest with the specified settings.
 
         Args:
-            symbol: Het te analyseren handelssymbool
+            strategy_name: Name of the strategy to test
+            symbols: List of trading symbols
+            start_date: Start date for the backtest (YYYY-MM-DD)
+            end_date: End date for the backtest (YYYY-MM-DD)
+            timeframe: Timeframe for the data
+            parameters: Custom parameters for the strategy
+            plot_results: Whether to generate plots
 
         Returns:
-            Dict met handelssignalen en metadata
+            Dictionary with backtest results
         """
-        # Timeframe bepalen (standaard D1 voor Turtle)
-        timeframe = self.config.get("timeframe", "D1")
+        # Import strategy factory here to avoid circular imports
+        from src.strategy.strategy_factory import StrategyFactory
 
-        # Bereken hoeveel bars we nodig hebben
-        bars_needed = (max(self.entry_period, self.exit_period, self.atr_period,
-            self.filter_period) + 50)
+        # Load the specified strategy
+        strategy = StrategyFactory.create_strategy(strategy_name, connector=None,
+                                                   # Backtester will create mock connector
+                                                   risk_manager=None,
+                                                   # Backtester will create mock risk manager
+                                                   logger=self.logger,
+                                                   config=self.config, )
 
-        # Haal historische data op via connector
-        data = self.connector.get_historical_data(symbol=symbol, timeframe=timeframe,
-            num_bars=bars_needed)
+        self.logger.log_info(f"Running backtest with {strategy_name}")
 
-        if data is None or len(data) < bars_needed:
-            self.logger.warning(
-                f"Onvoldoende data voor {symbol} om signalen te genereren")
-            return {"signal": "GEEN", "meta": {"reason": "onvoldoende_data"}}
+        # Load data for each symbol
+        for symbol in symbols:
+            data = self._load_historical_data(symbol, start_date, end_date, timeframe)
+            self.backtrader_adapter.add_data(symbol, data, timeframe)
 
-        # Bereken indicators en signalen
-        indicators = self.calculate_indicators(data)
+        # Run backtest
+        results = self.backtrader_adapter.run_backtest(strategy,
+                                                       debug=self.config.get("debug",
+                                                                             False),
+                                                       risk_per_trade=self.config.get(
+                                                           "risk", {}).get(
+                                                           "risk_per_trade", 0.01), )
 
-        # Bepaal huidige positie
-        current_position = self.get_position(symbol)
-        position_direction = (
-            current_position.get("direction", None) if current_position else None)
+        if plot_results:
+            # Generate plots
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_dir = self.config.get("output", {}).get("backtest_results_dir",
+                                                           "backtest_results")
+            os.makedirs(output_dir, exist_ok=True)
 
-        # Genereer signaal op basis van indicators en huidige positie
-        return self._generate_signal(symbol, data, indicators, position_direction)
+            plot_path = os.path.join(output_dir,
+                                     f"{strategy_name}_backtest_plot_{timestamp}.png")
+            self.backtrader_adapter.plot_results(plot_path)
 
-    def calculate_indicators(self, data: pd.DataFrame) -> Dict[str, Any]:
+        return results
+
+    def _load_historical_data(self, symbol: str, start_date: str, end_date: str,
+                              timeframe: str) -> pd.DataFrame:
         """
-        Bereken de technische indicatoren voor de Turtle Trading strategie.
+        Load historical data for a symbol.
 
         Args:
-            data: DataFrame met OHLCV data
+            symbol: Trading symbol
+            start_date: Start date
+            end_date: End date
+            timeframe: Timeframe
 
         Returns:
-            Dictionary met berekende indicatoren
+            DataFrame with OHLCV data
         """
-        # Zorg dat data gesorteerd is op datum (oplopend)
-        data = data.sort_index()
+        # Convert string dates to datetime objects
+        start_dt = pd.to_datetime(start_date)
+        end_dt = pd.to_datetime(end_date)
 
-        # --- Bereken indicatoren ---
-        # Entry channel (hoog van laatste N dagen)
-        data["entry_high"] = data["high"].rolling(window=self.entry_period).max()
-        data["entry_low"] = data["low"].rolling(window=self.entry_period).min()
+        # Define data directory
+        data_dir = os.path.join("data")
+        file_name = f"{symbol}_{timeframe}.csv"
+        file_path = os.path.join(data_dir, file_name)
 
-        # Exit channel (hoog/laag van laatste N/2 dagen)
-        data["exit_high"] = data["high"].rolling(window=self.exit_period).max()
-        data["exit_low"] = data["low"].rolling(window=self.exit_period).min()
-
-        # ATR berekenen
-        data["atr"] = calculate_atr(data, period=self.atr_period)
-
-        # Trendfilter (optioneel)
-        if self.use_filters:
-            data["ma"] = data["close"].rolling(window=self.filter_period).mean()
-            trend_up = data["close"].iloc[-1] > data["ma"].iloc[-1] if not data["ma"].isna().iloc[-1] else True
-            trend_down = data["close"].iloc[-1] < data["ma"].iloc[-1] if not data["ma"].isna().iloc[-1] else True
+        if os.path.exists(file_path):
+            try:
+                # Load data from CSV
+                data = pd.read_csv(file_path)
+                data["date"] = pd.to_datetime(data["date"])
+                data = data[(data["date"] >= start_dt) & (data["date"] <= end_dt)]
+                return data
+            except Exception as e:
+                self.logger.log_info(f"Error loading data for {symbol}: {e}")
+                return self._generate_test_data(symbol, start_dt, end_dt)
         else:
-            trend_up = True
-            trend_down = True
+            # Generate test data if file not found
+            self.logger.log_info(
+                f"Data file for {symbol} not found, generating test data")
+            return self._generate_test_data(symbol, start_dt, end_dt)
 
-        # Veilige methode voor het ophalen van eerdere indicatorwaarden
-        def safe_previous_value(series, default=None):
-            """Haal veilig een eerdere waarde op, met fallback waarden."""
-            non_na_values = series.dropna()
-            if len(non_na_values) >= 2:
-                return non_na_values.iloc[-2]
-            elif len(non_na_values) == 1:
-                return non_na_values.iloc[-1]  # Gebruik de enige beschikbare waarde
-            else:
-                # Als geen data beschikbaar, gebruik default of current price
-                return default if default is not None else data["close"].iloc[-1]
+    def _generate_test_data(self, symbol: str, start_dt, end_dt) -> pd.DataFrame:
+        """
+        Generate test OHLCV data with enough history for strategies.
 
-        # Veilige current_price en ATR checks
-        current_price = data["close"].iloc[-1]
-        current_atr = data["atr"].iloc[-1] if not data["atr"].isna().iloc[-1] else 0.001
+        Args:
+            symbol: Trading symbol
+            start_dt: Start datetime
+            end_dt: End datetime
 
-        # Return de berekende indicators met veilige waardes
-        return {
-            "data": data,
-            "current_price": current_price,
-            "previous_entry_high": safe_previous_value(data["entry_high"]),
-            "previous_entry_low": safe_previous_value(data["entry_low"]),
-            "previous_exit_high": safe_previous_value(data["exit_high"]),
-            "previous_exit_low": safe_previous_value(data["exit_low"]),
-            "current_atr": current_atr,
-            "trend_up": trend_up,
-            "trend_down": trend_down,
-        }
+        Returns:
+            DataFrame with synthetic OHLCV data
+        """
+        import numpy as np
 
-    def _generate_signal(self, symbol: str, data: pd.DataFrame,
-        indicators: Dict[str, Any], current_direction: Optional[str], ) -> Dict[
+        # Bereken hoeveel extra warmup dagen we nodig hebben voor indicatoren
+        # Voor turtle strategie hebben we minstens entry_period bars nodig (typisch 20-60)
+        warmup_days = 100  # Ruime marge voor alle strategieën
+
+        # Genereer date range met warmup
+        extended_start = start_dt - pd.Timedelta(days=warmup_days)
+        dates = pd.date_range(extended_start, end_dt, freq="D")
+
+        # Genereer random prices met een lichte trend
+        base_price = 1.0 if "USD" in symbol else 100.0
+        trend = np.linspace(0, 0.2, len(dates))
+        random_factor = np.random.normal(0, 0.02, len(dates)).cumsum()
+
+        # Calculate prices
+        closes = base_price * (1 + trend + random_factor)
+        opens = np.roll(closes, 1)
+        opens[0] = closes[0] * 0.99
+        highs = np.maximum(opens, closes) * 1.01
+        lows = np.minimum(opens, closes) * 0.99
+        volumes = np.random.randint(100, 1000, len(dates))
+
+        # Create DataFrame
+        data = pd.DataFrame(
+            {"date": dates, "open": opens, "high": highs, "low": lows, "close": closes,
+             "volume": volumes, })
+
+        # Voeg opzettelijke breakouts toe voor turtle strategie
+        # Dit zorgt ervoor dat de strategie interessante handelssignalen ziet
+        for i in range(3):
+            breakout_idx = int(len(data) * 0.25 * (i + 1))  # Op 25%, 50%, 75% punt
+            if breakout_idx + 5 < len(data):
+                # Creëer een opwaartse breakout
+                data.loc[data.index[breakout_idx:breakout_idx + 5], 'high'] *= 1.03
+                data.loc[data.index[breakout_idx:breakout_idx + 5], 'close'] *= 1.02
+
+                # Creëer ook enkele neerwaartse breakouts
+                reversal_idx = breakout_idx + 15
+                if reversal_idx + 5 < len(data):
+                    data.loc[data.index[reversal_idx:reversal_idx + 5], 'low'] *= 0.97
+                    data.loc[data.index[reversal_idx:reversal_idx + 5], 'close'] *= 0.98
+
+        return data
+
+    def run_walk_forward_optimization(self, strategy_name: str, symbols: List[str],
+                                      start_date: str, end_date: str,
+                                      timeframe: str = "D1",
+                                      window_size_days: int = 180,
+                                      step_size_days: int = 30,
+                                      param_grid: Dict[str, List] = None) -> Dict[
         str, Any]:
         """
-        Genereer een handelssignaal op basis van de berekende indicators.
+        Uitvoeren van walk-forward optimalisatie.
 
         Args:
-            symbol: Handelssymbool
-            data: DataFrame met OHLCV data
-            indicators: Dictionary met berekende indicators
-            current_direction: Huidige positierichting (BUY/SELL/None)
+            strategy_name: Naam van de strategie
+            symbols: Lijst van symbolen
+            start_date: Startdatum (YYYY-MM-DD)
+            end_date: Einddatum (YYYY-MM-DD)
+            timeframe: Tijdsframe voor de data
+            window_size_days: Grootte van elk window in dagen
+            step_size_days: Aantal dagen om vooruit te schuiven
+            param_grid: Dictionary met parameter ranges voor optimalisatie
 
         Returns:
-            Dictionary met handelssignaal en metadata
+            Dictionary met resultaten per window
         """
-        # Haal indicatorwaarden op
-        current_price = indicators["current_price"]
-        previous_entry_high = indicators["previous_entry_high"]
-        previous_entry_low = indicators["previous_entry_low"]
-        previous_exit_high = indicators["previous_exit_high"]
-        previous_exit_low = indicators["previous_exit_low"]
-        current_atr = indicators["current_atr"]
-        trend_up = indicators["trend_up"]
-        trend_down = indicators["trend_down"]
+        # Converteer datums naar datetime
+        start_dt = pd.to_datetime(start_date)
+        end_dt = pd.to_datetime(end_date)
 
-        # Standaard geen signaal
-        signal = "GEEN"
-        meta = {"atr": current_atr, "entry_price": None, "stop_loss": None,
-            "risk_pips": None, "reason": None, }
+        # Bepaal de windows
+        windows = []
+        current_start = start_dt
 
-        # Entry logica - als we geen positie hebben
-        if not current_direction:
-            # Long entry (breakout boven entry_high)
-            if current_price > previous_entry_high and trend_up:
-                signal = "BUY"
-                entry_price = previous_entry_high
-                stop_loss = entry_price - (self.atr_multiplier * current_atr)
+        while current_start + pd.Timedelta(days=window_size_days) <= end_dt:
+            window_end = current_start + pd.Timedelta(days=window_size_days)
+            windows.append((current_start, window_end))
+            current_start += pd.Timedelta(days=step_size_days)
 
-                meta["entry_price"] = entry_price
-                meta["stop_loss"] = stop_loss
-                meta["risk_pips"] = self.atr_multiplier * current_atr
-                meta["reason"] = "long_entry_breakout"
+        # Als er geen parameters gegeven zijn, gebruik standaardwaarden
+        if param_grid is None:
+            param_grid = {
+                "entry_period": [20, 30, 40, 50, 60],
+                "exit_period": [10, 15, 20],
+                "atr_multiplier": [1.5, 2.0, 2.5, 3.0]
+            }
 
-                # Update breakout prijs
-                self.last_breakout_prices[symbol] = entry_price
+        # Resultaten per window bijhouden
+        results = {}
+        best_params = {}
 
-            # Short entry (breakout onder entry_low)
-            elif current_price < previous_entry_low and trend_down:
-                signal = "SELL"
-                entry_price = previous_entry_low
-                stop_loss = entry_price + (self.atr_multiplier * current_atr)
+        # Voor elk window, optimaliseer parameters
+        for i, (window_start, window_end) in enumerate(windows):
+            window_name = f"Window_{i + 1}"
+            self.logger.log_info(
+                f"Optimalisatie voor {window_name}: {window_start.date()} tot {window_end.date()}")
 
-                meta["entry_price"] = entry_price
-                meta["stop_loss"] = stop_loss
-                meta["risk_pips"] = self.atr_multiplier * current_atr
-                meta["reason"] = "short_entry_breakout"
+            # Train/test splitsing (80/20)
+            train_days = int(window_size_days * 0.8)
+            train_end = window_start + pd.Timedelta(days=train_days)
 
-                # Update breakout prijs
-                self.last_breakout_prices[symbol] = entry_price
+            # Resultaten voor dit window
+            window_results = {
+                "train_period": (
+                window_start.strftime("%Y-%m-%d"), train_end.strftime("%Y-%m-%d")),
+                "test_period": (
+                train_end.strftime("%Y-%m-%d"), window_end.strftime("%Y-%m-%d")),
+                "train_results": [],
+                "test_results": None,
+                "best_params": None
+            }
 
-        # Exit logica - voor bestaande posities
-        else:
-            if current_direction == "BUY":
-                # Exit long positie als prijs onder exit_low daalt
-                if current_price < previous_exit_low:
-                    signal = "CLOSE_BUY"
-                    meta["reason"] = "long_exit_breakout"
+            # Optimalisatie op trainingset
+            # Simpele grid search implementatie
+            best_train_sharpe = -float('inf')
+            best_params_window = None
 
-            elif current_direction == "SELL":
-                # Exit short positie als prijs boven exit_high stijgt
-                if current_price > previous_exit_high:
-                    signal = "CLOSE_SELL"
-                    meta["reason"] = "short_exit_breakout"
+            # Voor elke parametercombinatie
+            # (Hier zou je itertools.product kunnen gebruiken om alle combinaties te genereren)
+            # Dit is een vereenvoudigde implementatie
+            for entry_period in param_grid["entry_period"]:
+                for exit_period in param_grid["exit_period"]:
+                    for atr_multiplier in param_grid["atr_multiplier"]:
+                        # Stel parameters in
+                        params = {
+                            "strategy": {
+                                "entry_period": entry_period,
+                                "exit_period": exit_period,
+                                "atr_multiplier": atr_multiplier
+                            }
+                        }
 
-        # Aanpassingen voor swing modus (indien ingeschakeld)
-        if self.swing_mode and signal in ["BUY", "SELL"]:
-            # In swing modus nemen we minder risico met strakker stops
-            meta["stop_loss"] = (meta["entry_price"] - (
-                    self.atr_multiplier * 0.75 * current_atr) if signal == "BUY" else
-            meta["entry_price"] + (self.atr_multiplier * 0.75 * current_atr))
-            meta["risk_pips"] = self.atr_multiplier * 0.75 * current_atr
-            meta["reason"] += "_swing"
+                        # Maak tijdelijke config met deze parameters
+                        temp_config = self.config.copy()
+                        temp_config.update(params)
 
-        return {"signal": signal, "meta": meta}
+                        # Voer backtest uit op trainingsperiode
+                        try:
+                            backtest_mgr = BacktestingManager(temp_config, self.logger)
+                            train_result = backtest_mgr.run_backtest(
+                                strategy_name=strategy_name,
+                                symbols=symbols,
+                                start_date=window_start.strftime("%Y-%m-%d"),
+                                end_date=train_end.strftime("%Y-%m-%d"),
+                                timeframe=timeframe,
+                                plot_results=False
+                            )
 
-    def get_position(self, symbol: str) -> Optional[Dict[str, Any]]:
+                            # Bewaar resultaten
+                            train_sharpe = train_result.get("sharpe_ratio", 0)
+
+                            # Voeg resultaat toe aan trainingresultaten
+                            window_results["train_results"].append({
+                                "params": params["strategy"],
+                                "sharpe": train_sharpe,
+                                "profit_pct": train_result.get("profit_percentage", 0),
+                                "win_rate": train_result.get("win_rate", 0),
+                                "max_drawdown": train_result.get("max_drawdown", 0)
+                            })
+
+                            # Check of dit de beste parameters zijn
+                            if train_sharpe > best_train_sharpe:
+                                best_train_sharpe = train_sharpe
+                                best_params_window = params["strategy"]
+
+                        except Exception as e:
+                            self.logger.log_info(f"Fout bij optimalisatie: {e}",
+                                                 level="ERROR")
+
+            # Sla beste parameters op
+            window_results["best_params"] = best_params_window
+
+            # Test de beste parameters op de testset
+            if best_params_window:
+                # Maak config met beste parameters
+                test_config = self.config.copy()
+                test_config.update({"strategy": best_params_window})
+
+                # Voer backtest uit op testperiode
+                try:
+                    backtest_mgr = BacktestingManager(test_config, self.logger)
+                    test_result = backtest_mgr.run_backtest(
+                        strategy_name=strategy_name,
+                        symbols=symbols,
+                        start_date=train_end.strftime("%Y-%m-%d"),
+                        end_date=window_end.strftime("%Y-%m-%d"),
+                        timeframe=timeframe,
+                        plot_results=False
+                    )
+
+                    # Bewaar testresultaten
+                    window_results["test_results"] = {
+                        "sharpe": test_result.get("sharpe_ratio", 0),
+                        "profit_pct": test_result.get("profit_percentage", 0),
+                        "win_rate": test_result.get("win_rate", 0),
+                        "max_drawdown": test_result.get("max_drawdown", 0),
+                        "total_trades": test_result.get("total_trades", 0)
+                    }
+
+                    # Log resultaten
+                    self.logger.log_info(
+                        f"Window {i + 1} resultaten: "
+                        f"Sharpe: {window_results['test_results']['sharpe']:.2f}, "
+                        f"Winst: {window_results['test_results']['profit_pct']:.2f}%, "
+                        f"Win Rate: {window_results['test_results']['win_rate']:.2f}%"
+                    )
+
+                except Exception as e:
+                    self.logger.log_info(f"Fout bij testen van beste parameters: {e}",
+                                         level="ERROR")
+
+            # Sla resultaten op voor dit window
+            results[window_name] = window_results
+            best_params[window_name] = best_params_window
+
+        # Analyseer consistentie van parameters over windows
+        param_stability = self._analyze_parameter_stability(best_params)
+
+        # Voeg overall statistieken toe
+        overall_results = {
+            "windows": results,
+            "parameter_stability": param_stability,
+            "out_of_sample_performance": self._calculate_out_of_sample_stats(results),
+            "best_overall_params": self._find_best_overall_params(results)
+        }
+
+        return overall_results
+
+    def _analyze_parameter_stability(self, best_params: Dict[str, Dict]) -> Dict[
+        str, Any]:
         """
-        Haal de huidige positie op voor een symbool.
+        Analyseer de stabiliteit van parameters over verschillende windows.
 
         Args:
-            symbol: Handelssymbool
+            best_params: Dictionary met beste parameters per window
 
         Returns:
-            Dictionary met positiegegevens of None als er geen positie is
+            Dictionary met stabiliteits-metrics
         """
-        # Controleer eerst in onze lokale positieadministratie
-        if symbol in self.positions:
-            return self.positions[symbol]
+        # Een eenvoudige implementatie die kijkt naar variatie in parameters
+        if not best_params:
+            return {"stable": False, "reason": "Geen parameters beschikbaar"}
 
-        # Anders vraag aan connector (indien beschikbaar)
-        if self.connector:
-            position = self.connector.get_position(symbol)
-            if position:
-                # Sla positie op in lokale administratie
-                self.positions[symbol] = position
-                return position
+        # Verzamel alle parameterwaarden
+        param_values = {}
+        for window, params in best_params.items():
+            if params:
+                for param_name, value in params.items():
+                    if param_name not in param_values:
+                        param_values[param_name] = []
+                    param_values[param_name].append(value)
 
-        return None
+        # Bereken variatie voor elke parameter
+        param_variations = {}
+        for param_name, values in param_values.items():
+            if values:
+                param_variations[param_name] = {
+                    "min": min(values),
+                    "max": max(values),
+                    "mean": sum(values) / len(values),
+                    "range_pct": (max(values) - min(values)) / max(values) * 100 if max(
+                        values) > 0 else 0,
+                    "values": values
+                }
 
-    def get_open_positions(self) -> Dict[str, List]:
+        # Bepaal stabiliteit
+        unstable_params = []
+        for param_name, stats in param_variations.items():
+            # Als range meer dan 50% is van de maximumwaarde, beschouw als onstabiel
+            if stats["range_pct"] > 50:
+                unstable_params.append(param_name)
+
+        return {
+            "stable": len(unstable_params) == 0,
+            "unstable_params": unstable_params,
+            "variations": param_variations
+        }
+
+    def _calculate_out_of_sample_stats(self, results: Dict[str, Dict]) -> Dict[
+        str, float]:
         """
-        Haal alle open posities op.
-
-        Returns:
-            Dictionary met open posities per symbool
-        """
-        # Haal posities op via connector
-        if self.connector:
-            positions = self.connector.get_open_positions()
-
-            # Update onze lokale administratie
-            for symbol, position in positions.items():
-                self.positions[symbol] = position
-
-            return positions
-
-        # Als geen connector, gebruik lokale administratie
-        return self.positions
-
-    def on_order_filled(self, symbol: str, order_type: str, price: float, volume: float,
-        order_id: str, timestamp: str, ) -> None:
-        """
-        Verwerk een gevulde order en update de positie administratie.
+        Bereken statistieken over out-of-sample prestaties.
 
         Args:
-            symbol: Handelssymbool
-            order_type: Type order (BUY, SELL, etc.)
-            price: Uitvoeringsprijs
-            volume: Handelsvolume
-            order_id: Unieke order ID
-            timestamp: Tijdstip van uitvoering
-        """
-        if order_type in ["BUY", "SELL"]:
-            direction = order_type
-
-            # Nieuwe positie registreren
-            self.positions[symbol] = {"direction": direction, "entry_price": price,
-                "volume": volume, "order_id": order_id, "entry_time": timestamp, }
-
-            self.logger.info(
-                f"Nieuwe {direction} positie in {symbol}: prijs={price}, volume={volume}")
-
-        elif order_type in ["CLOSE_BUY", "CLOSE_SELL"]:
-            # Positie verwijderen uit administratie na sluiting
-            if symbol in self.positions:
-                entry_price = self.positions[symbol]["entry_price"]
-                direction = self.positions[symbol]["direction"]
-                profit_loss = 0
-
-                if direction == "BUY":
-                    profit_loss = price - entry_price
-                elif direction == "SELL":
-                    profit_loss = entry_price - price
-
-                self.logger.info(
-                    f"Positie gesloten in {symbol}: entry={entry_price}, exit={price}, "
-                    f"P/L={profit_loss}")
-
-                # Verwijder positie uit administratie
-                del self.positions[symbol]
-
-    def calculate_position_trailing_stop(self, symbol: str, current_price: float) -> \
-    Optional[float]:
-        """
-        Bereken een trailing stop voor een bestaande positie volgens Turtle regels.
-
-        Args:
-            symbol: Handelssymbool
-            current_price: Huidige marktprijs
+            results: Dictionary met resultaten per window
 
         Returns:
-            Nieuwe stop loss prijs of None als geen aanpassing nodig is
+            Dictionary met out-of-sample statistieken
         """
-        if symbol not in self.positions:
+        # Verzamel test resultaten van alle windows
+        test_profits = []
+        test_sharpes = []
+        test_win_rates = []
+        test_drawdowns = []
+
+        for window_name, window_data in results.items():
+            if window_data.get("test_results"):
+                test_profits.append(window_data["test_results"].get("profit_pct", 0))
+                test_sharpes.append(window_data["test_results"].get("sharpe", 0))
+                test_win_rates.append(window_data["test_results"].get("win_rate", 0))
+                test_drawdowns.append(
+                    window_data["test_results"].get("max_drawdown", 0))
+
+        # Return lege resultaten als geen testdata beschikbaar is
+        if not test_profits:
+            return {
+                "avg_profit_pct": 0,
+                "avg_sharpe": 0,
+                "avg_win_rate": 0,
+                "avg_drawdown": 0,
+                "profit_consistency": 0,
+                "windows_profitable": 0
+            }
+
+        # Bereken statistieken
+        avg_profit = sum(test_profits) / len(test_profits)
+        avg_sharpe = sum(test_sharpes) / len(test_sharpes)
+        avg_win_rate = sum(test_win_rates) / len(test_win_rates)
+        avg_drawdown = sum(test_drawdowns) / len(test_drawdowns)
+
+        # Bereken consistentie (hoeveel % van windows was winstgevend)
+        profitable_windows = sum(1 for p in test_profits if p > 0)
+        profit_consistency = profitable_windows / len(test_profits) * 100
+
+        return {
+            "avg_profit_pct": avg_profit,
+            "avg_sharpe": avg_sharpe,
+            "avg_win_rate": avg_win_rate,
+            "avg_drawdown": avg_drawdown,
+            "profit_consistency": profit_consistency,
+            "windows_profitable": profitable_windows
+        }
+
+    def _find_best_overall_params(self, results: Dict[str, Dict]) -> Dict[str, Any]:
+        """
+        Vind de beste overall parameters op basis van out-of-sample prestaties.
+
+        Args:
+            results: Dictionary met resultaten per window
+
+        Returns:
+            Dictionary met beste parameters en prestatiemetrieken
+        """
+        # Verzamel resultaten per parameterset
+        param_results = {}
+
+        for window_name, window_data in results.items():
+            if window_data.get("best_params") and window_data.get("test_results"):
+                # Converteer params naar een tuple om te gebruiken als dictionary key
+                param_key = tuple(
+                    sorted((k, v) for k, v in window_data["best_params"].items()))
+
+                if param_key not in param_results:
+                    param_results[param_key] = {
+                        "params": window_data["best_params"],
+                        "test_results": [],
+                        "windows": []
+                    }
+
+                param_results[param_key]["test_results"].append(
+                    window_data["test_results"])
+                param_results[param_key]["windows"].append(window_name)
+
+        # Vind de parameterset met hoogste gemiddelde Sharpe ratio
+        best_avg_sharpe = -float('inf')
+        best_params = None
+
+        for param_key, data in param_results.items():
+            test_sharpes = [r.get("sharpe", 0) for r in data["test_results"]]
+            avg_sharpe = sum(test_sharpes) / len(test_sharpes) if test_sharpes else 0
+
+            if avg_sharpe > best_avg_sharpe:
+                best_avg_sharpe = avg_sharpe
+                best_params = data["params"]
+
+        # Als geen beste parameters gevonden, return None
+        if not best_params:
             return None
 
-        position = self.positions[symbol]
-        direction = position["direction"]
-        entry_price = position["entry_price"]
-
-        # Implementatie van 2-ATR breakeven stop na 1-ATR winst
-        # (een vereenvoudigde versie van de Turtle regels)
-        return None  # Uitbreidingsmogelijkheid voor verdere implementatie
+        # Return beste parameters met prestatiemetrieken
+        return {
+            "parameters": best_params,
+            "metrics": {
+                "avg_out_of_sample_sharpe": best_avg_sharpe,
+                "frequency": len([w for pk, data in param_results.items()
+                                  if data["params"] == best_params
+                                  for w in data["windows"]]) / sum(
+                    len(data["windows"]) for data in param_results.values())
+            }
+        }
