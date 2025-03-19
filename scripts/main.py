@@ -9,11 +9,11 @@ import time
 from datetime import datetime
 
 import pandas as pd
-from src.ftmo.validator.py import FTMOValidator
 
 # Gewijzigd: Gebruik de bestaande backtrader_integration in plaats van advanced_backtester
 from src.analysis.backtrader_integration import BacktestingManager
 from src.connector.mt5_connector import MT5Connector
+from src.ftmo.validator import FTMOValidator
 from src.risk.risk_manager import RiskManager
 from src.strategy.strategy_factory import StrategyFactory
 from src.utils.config import load_config
@@ -139,7 +139,7 @@ def setup_trading_environment(args):
         backtester = BacktestingManager(config, logger)
 
     # Initialiseer FTMO validator
-    validator.py = FTMOValidator(config, logger)
+    validator = FTMOValidator(config, logger)
 
     # Maak een omgevings-dictionary om alles terug te geven
     environment = {
@@ -149,7 +149,7 @@ def setup_trading_environment(args):
         "strategy": strategy,
         "risk_manager": risk_manager,
         "backtester": backtester,
-        "validator.py": validator.py,
+        "validator": validator,
     }
 
     return environment
@@ -163,7 +163,7 @@ def run_live_trading(args, environment):
     mt5_connector = environment["mt5_connector"]
     strategy = environment["strategy"]
     risk_manager = environment["risk_manager"]
-    validator.py = environment["validator.py"]
+    validator = environment["validator"]
 
     logger.info("Live trading gestart")
 
@@ -270,7 +270,7 @@ def run_live_trading(args, environment):
             logger.info(f"FTMO Status: {json.dumps(ftmo_status, indent=2)}")
 
             # Valideer FTMO regels
-            validator.py.validate(ftmo_status)
+            validator.validate(ftmo_status)
 
             # Wacht tot volgende interval
             logger.info(f"Wachten tot volgende cyclus ({trading_interval} seconden)")
@@ -293,7 +293,7 @@ def run_backtest(args, environment):
     logger = environment["logger"]
     strategy = environment["strategy"]
     backtester = environment["backtester"]
-    validator.py = environment["validator.py"]
+    validator = environment["validator"]
 
     logger.info("Backtest gestart")
 

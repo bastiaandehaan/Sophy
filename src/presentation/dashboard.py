@@ -982,11 +982,10 @@ class TradingDashboard:
                             "stop_loss": matching_trade["stop_loss"],
                             "take_profit": matching_trade["take_profit"],
                             "duration": (
-                                            pd.to_datetime(timestamp)
-                                            - pd.to_datetime(
-                                            matching_trade["entry_time"])
-                                        ).total_seconds()
-                                        / 3600,  # in hours
+                                pd.to_datetime(timestamp)
+                                - pd.to_datetime(matching_trade["entry_time"])
+                            ).total_seconds()
+                            / 3600,  # in hours
                         }
 
                         trades.append(trade)
@@ -1236,9 +1235,8 @@ class TradingDashboard:
                     ):
                         # Calculate new average price
                         pos["avg_price"] = (
-                                               pos["avg_price"] * abs(
-                                               pos["net_volume"]) + price * volume
-                                           ) / (abs(pos["net_volume"]) + volume)
+                            pos["avg_price"] * abs(pos["net_volume"]) + price * volume
+                        ) / (abs(pos["net_volume"]) + volume)
                         pos["net_volume"] = new_volume
                     # If flipping position
                     elif new_volume != 0:

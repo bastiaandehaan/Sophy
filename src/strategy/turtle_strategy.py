@@ -104,7 +104,7 @@ class TurtleStrategy(Strategy):
             self.logger.warning(
                 f"Onvoldoende data voor {symbol} om signalen te genereren"
             )
-            return {"signal": "GEEN", "meta": {"reason": "onvoldoende_data"}}
+            return {"signal": "NONE", "meta": {"reason": "onvoldoende_data"}}
 
         # Bereken indicators en signalen
         indicators = self.calculate_indicators(data)
@@ -219,7 +219,7 @@ class TurtleStrategy(Strategy):
         trend_down = indicators["trend_down"]
 
         # Standaard geen signaal
-        signal = "GEEN"
+        signal = "NONE"
         meta = {
             "atr": current_atr,
             "entry_price": None,

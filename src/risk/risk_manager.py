@@ -38,20 +38,25 @@ class RiskManager:
 
         # Algemene risicoparameters
         self.risk_per_trade = Decimal(
-            str(config.get("risk_per_trade", "0.01")))  # 1% risico per trade
+            str(config.get("risk_per_trade", "0.01"))
+        )  # 1% risico per trade
         self.max_trades_per_day = config.get("max_trades_per_day", 5)
         self.max_trades_per_symbol = config.get("max_trades_per_symbol", 1)
 
         # FTMO-specifieke parameters
         self.initial_balance = Decimal("0")  # Wordt ingesteld tijdens initialisatie
         self.daily_drawdown_limit = Decimal(
-            str(config.get("daily_drawdown_limit", "0.05")))  # 5% max dagelijks verlies
+            str(config.get("daily_drawdown_limit", "0.05"))
+        )  # 5% max dagelijks verlies
         self.total_drawdown_limit = Decimal(
-            str(config.get("total_drawdown_limit", "0.10")))  # 10% max totaal verlies
+            str(config.get("total_drawdown_limit", "0.10"))
+        )  # 10% max totaal verlies
         self.profit_target = Decimal(
-            str(config.get("profit_target", "0.10")))  # 10% winstdoel
-        self.min_trading_days = config.get("min_trading_days",
-                                           4)  # Min. 4 dagen met trades
+            str(config.get("profit_target", "0.10"))
+        )  # 10% winstdoel
+        self.min_trading_days = config.get(
+            "min_trading_days", 4
+        )  # Min. 4 dagen met trades
 
         # State bijhouden
         self.today_trades = 0
@@ -84,7 +89,8 @@ class RiskManager:
             self.initial_balance = Decimal(str(account_info["balance"]))
             self.highest_balance = self.initial_balance
             self.logger.info(
-                f"RiskManager geïnitialiseerd met saldo: {self.initial_balance}")
+                f"RiskManager geïnitialiseerd met saldo: {self.initial_balance}"
+            )
         else:
             self.logger.error("Kon accountinformatie niet ophalen na meerdere pogingen")
             self.is_trading_allowed = False
@@ -182,7 +188,8 @@ class RiskManager:
         self._update_daily_state()
         if self.today_trades >= self.max_trades_per_day:
             self.logger.warning(
-                f"Maximum daily trades reached: {self.max_trades_per_day}")
+                f"Maximum daily trades reached: {self.max_trades_per_day}"
+            )
             return 0.0
 
         # Get necessary information
@@ -197,11 +204,13 @@ class RiskManager:
         risk_amount = account_balance * self.risk_per_trade
 
         # Determine risk in pips
-        actual_risk_pips = self._determine_risk_pips(symbol, entry_price, stop_loss,
-                                                     risk_pips)
+        actual_risk_pips = self._determine_risk_pips(
+            symbol, entry_price, stop_loss, risk_pips
+        )
         if actual_risk_pips <= Decimal("0"):
             self.logger.error(
-                f"Invalid risk_pips calculated for {symbol}: {actual_risk_pips}")
+                f"Invalid risk_pips calculated for {symbol}: {actual_risk_pips}"
+            )
             return 0.0
 
         # Calculate pip value and position size
@@ -222,7 +231,7 @@ class RiskManager:
         symbol: str,
         entry_price: Decimal,
         stop_loss: Optional[Decimal],
-        risk_pips: Optional[Decimal]
+        risk_pips: Optional[Decimal],
     ) -> Decimal:
         """Determine risk in pips for the trade."""
         if stop_loss is None and risk_pips is None:
@@ -318,8 +327,8 @@ class RiskManager:
         total_drawdown = Decimal("0")
         if self.highest_balance > Decimal("0"):
             total_drawdown = (
-                                 self.highest_balance - current_balance
-                             ) / self.highest_balance
+                self.highest_balance - current_balance
+            ) / self.highest_balance
 
         if daily_drawdown >= self.daily_drawdown_limit:
             self.logger.warning(
@@ -334,7 +343,8 @@ class RiskManager:
             self.is_trading_allowed = False
 
         if current_balance >= self.initial_balance * (
-            Decimal("1") + self.profit_target):
+            Decimal("1") + self.profit_target
+        ):
             self.logger.info(
                 f"Winstdoel bereikt: ${current_balance:.2f} >= ${self.initial_balance * (Decimal('1') + self.profit_target):.2f}"
             )

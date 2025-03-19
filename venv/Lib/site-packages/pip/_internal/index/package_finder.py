@@ -41,7 +41,6 @@ if TYPE_CHECKING:
 
 __all__ = ["FormatControl", "BestCandidateResult", "PackageFinder"]
 
-
 logger = getLogger(__name__)
 
 BuildTag = Union[Tuple[()], Tuple[int, str]]

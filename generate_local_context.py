@@ -9,6 +9,7 @@ Geoptimaliseerd voor beperkte uitvoergrootte
 
 import datetime
 import glob
+
 # Configuratie
 import os
 import re

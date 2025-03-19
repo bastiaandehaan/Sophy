@@ -142,11 +142,11 @@ class BacktraderAdapter:
             "initial_balance": self.cerebro.broker.startingcash,
             "final_balance": self.cerebro.broker.getvalue(),
             "profit_loss": self.cerebro.broker.getvalue()
-                           - self.cerebro.broker.startingcash,
+            - self.cerebro.broker.startingcash,
             "profit_percentage": (
-                                     self.cerebro.broker.getvalue() / self.cerebro.broker.startingcash - 1
-                                 )
-                                 * 100,
+                self.cerebro.broker.getvalue() / self.cerebro.broker.startingcash - 1
+            )
+            * 100,
             "total_trades": total_trades,
             "won_trades": won_trades,
             "lost_trades": lost_trades,

@@ -6,7 +6,6 @@ if sys.version_info >= (3, 8):
 else:
     from pip._vendor.typing_extensions import Literal  # pragma: no cover
 
-
 from ._loop import loop_last
 from .console import Console, ConsoleOptions, RenderableType, RenderResult
 from .control import Control

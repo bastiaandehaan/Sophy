@@ -293,9 +293,8 @@ class FTMOValidator:
             daily_stats["close_balance"] - daily_stats["prev_close"]
         )
         daily_stats["daily_pnl_pct"] = (
-                                           daily_stats["daily_pnl"] / daily_stats[
-                                           "prev_close"]
-                                       ) * 100
+            daily_stats["daily_pnl"] / daily_stats["prev_close"]
+        ) * 100
         daily_stats["daily_drawdown"] = (
             (daily_stats["min_balance"] - daily_stats["prev_close"])
             / daily_stats["prev_close"]

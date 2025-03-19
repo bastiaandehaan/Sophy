@@ -240,16 +240,15 @@ class Logger:
                     if isinstance(pos, dict):
                         vol = pos.get("volume", 0)
                         profit_pct = (
-                                         pos.get("profit", 0) / account_info.get(
-                                         "balance", 100000)
-                                     ) * 100
+                            pos.get("profit", 0) / account_info.get("balance", 100000)
+                        ) * 100
                     else:
                         # Object met attributen (zoals MT5 positie object)
                         vol = getattr(pos, "volume", 0)
                         profit_pct = (
-                                         getattr(pos, "profit", 0)
-                                         / account_info.get("balance", 100000)
-                                     ) * 100
+                            getattr(pos, "profit", 0)
+                            / account_info.get("balance", 100000)
+                        ) * 100
 
                     position_parts.append(f"{symbol}:{vol}@{profit_pct:.2f}%")
 

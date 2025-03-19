@@ -779,13 +779,13 @@ class BayesianOptimizer:
         best_score = (
             -result.fun
             if metric
-               in [
-                   "sharpe_ratio",
-                   "profit_factor",
-                   "net_profit",
-                   "net_profit_pct",
-                   "win_rate",
-               ]
+            in [
+                "sharpe_ratio",
+                "profit_factor",
+                "net_profit",
+                "net_profit_pct",
+                "win_rate",
+            ]
             else result.fun
         )
 
@@ -948,13 +948,13 @@ class BayesianOptimizer:
             "best_score": (
                 -result.fun
                 if metric
-                   in [
-                       "sharpe_ratio",
-                       "profit_factor",
-                       "net_profit",
-                       "net_profit_pct",
-                       "win_rate",
-                   ]
+                in [
+                    "sharpe_ratio",
+                    "profit_factor",
+                    "net_profit",
+                    "net_profit_pct",
+                    "win_rate",
+                ]
                 else result.fun
             ),
             "function_calls": result.nfev,
@@ -975,13 +975,13 @@ class BayesianOptimizer:
                     "score": (
                         -y
                         if metric
-                           in [
-                               "sharpe_ratio",
-                               "profit_factor",
-                               "net_profit",
-                               "net_profit_pct",
-                               "win_rate",
-                           ]
+                        in [
+                            "sharpe_ratio",
+                            "profit_factor",
+                            "net_profit",
+                            "net_profit_pct",
+                            "win_rate",
+                        ]
                         else y
                     ),
                 }

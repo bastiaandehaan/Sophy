@@ -54,7 +54,9 @@ def main():
     print("\nWil je nog meer details zien? (j/n): ", end="")
     if input().lower() == "j":
         # Voer gedetailleerde analyse uit met de validator
-        compliance = validator.py.check_ftmo_compliance()  # initial_balance hoeft niet meer als parameter
+        compliance = (
+            validator.py.check_ftmo_compliance()
+        )  # initial_balance hoeft niet meer als parameter
 
         if compliance["details"]:
             details = compliance["details"]

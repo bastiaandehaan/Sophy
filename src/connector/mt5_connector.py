@@ -1,5 +1,4 @@
 # src/connector/mt5_connector.py
-# Voeg deze import toe bovenaan de file:
 import os
 import time
 from datetime import datetime
@@ -376,6 +375,53 @@ class MT5Connector:
             )
             return []
         return list(positions)
+
+    def get_position(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """
+        Haal de huidige positie op voor een specifiek symbool.
+
+        Args:
+            symbol (str): Handelssymbool.
+
+        Returns:
+            Optional[Dict[str, Any]]: Informatie over de positie of None als er geen positie is.
+        """
+        if not self.connected:
+            self.logger.log_info(
+                f"Niet verbonden met MT5 bij ophalen positie voor {symbol}",
+                level="ERROR",
+            )
+            return None
+
+        positions = self.get_open_positions(symbol)
+
+        # Verwerk het resultaat afhankelijk van het type
+        if positions and isinstance(positions, list) and len(positions) > 0:
+            # Converteer MT5 positie naar dictionary voor consistente interface
+            pos = positions[0]
+            if hasattr(pos, "_asdict"):
+                # Als het een namedtuple is (vaak het geval met MT5 objecten)
+                return dict(pos._asdict())
+            elif isinstance(pos, dict):
+                return pos
+            else:
+                # Fallback voor generieke objecten
+                position_type = getattr(pos, "type", 0)
+                return {
+                    "symbol": symbol,
+                    "type": position_type,
+                    "direction": "BUY" if position_type == 0 else "SELL",
+                    # 0=BUY, 1=SELL in MT5
+                    "volume": getattr(pos, "volume", 0.0),
+                    "open_price": getattr(pos, "price_open", 0.0),
+                    "open_time": getattr(pos, "time", 0),
+                    "sl": getattr(pos, "sl", 0.0),
+                    "tp": getattr(pos, "tp", 0.0),
+                    "profit": getattr(pos, "profit", 0.0),
+                    "ticket": getattr(pos, "ticket", 0),
+                }
+
+        return None
 
     def place_order(
         self,

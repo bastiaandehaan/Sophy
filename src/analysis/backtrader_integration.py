@@ -189,15 +189,15 @@ class BacktestingManager:
             breakout_idx = int(len(data) * 0.25 * (i + 1))  # Op 25%, 50%, 75% punt
             if breakout_idx + 5 < len(data):
                 # Creëer een opwaartse breakout
-                data.loc[data.index[breakout_idx: breakout_idx + 5], "high"] *= 1.03
-                data.loc[data.index[breakout_idx: breakout_idx + 5], "close"] *= 1.02
+                data.loc[data.index[breakout_idx : breakout_idx + 5], "high"] *= 1.03
+                data.loc[data.index[breakout_idx : breakout_idx + 5], "close"] *= 1.02
 
                 # Creëer ook enkele neerwaartse breakouts
                 reversal_idx = breakout_idx + 15
                 if reversal_idx + 5 < len(data):
-                    data.loc[data.index[reversal_idx: reversal_idx + 5], "low"] *= 0.97
+                    data.loc[data.index[reversal_idx : reversal_idx + 5], "low"] *= 0.97
                     data.loc[
-                        data.index[reversal_idx: reversal_idx + 5], "close"
+                        data.index[reversal_idx : reversal_idx + 5], "close"
                     ] *= 0.98
 
         return data
@@ -574,7 +574,6 @@ class BacktestingManager:
                         for w in data["windows"]
                     ]
                 )
-                             / sum(
-                    len(data["windows"]) for data in param_results.values()),
+                / sum(len(data["windows"]) for data in param_results.values()),
             },
         }

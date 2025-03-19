@@ -44,11 +44,11 @@ def calculate_atr(df: pd.DataFrame, period: int = 14) -> np.ndarray:
     atr = np.zeros_like(tr)
     for i in range(len(tr)):
         if i < period:
-            atr[i] = np.mean(tr[0: i + 1]) if i > 0 else tr[0]
+            atr[i] = np.mean(tr[0 : i + 1]) if i > 0 else tr[0]
         else:
             atr[i] = (
-                         atr[i - 1] * (period - 1) + tr[i]
-                     ) / period  # Exponential smoothing
+                atr[i - 1] * (period - 1) + tr[i]
+            ) / period  # Exponential smoothing
 
     return atr
 
@@ -80,11 +80,11 @@ def calculate_donchian_channel(
     # Bereken rolling max en min
     for i in range(len(high)):
         if i < period:
-            upper[i] = np.max(high[0: i + 1])
-            lower[i] = np.min(low[0: i + 1])
+            upper[i] = np.max(high[0 : i + 1])
+            lower[i] = np.min(low[0 : i + 1])
         else:
-            upper[i] = np.max(high[i - period + 1: i + 1])
-            lower[i] = np.min(low[i - period + 1: i + 1])
+            upper[i] = np.max(high[i - period + 1 : i + 1])
+            lower[i] = np.min(low[i - period + 1 : i + 1])
 
     # Bereken middle channel
     middle = (upper + lower) / 2
@@ -122,7 +122,7 @@ def calculate_sma(prices: np.ndarray, period: int) -> np.ndarray:
 
     # Bereken SMA voor de rest
     for i in range(period - 1, len(prices)):
-        sma[i] = np.mean(prices[i - period + 1: i + 1])
+        sma[i] = np.mean(prices[i - period + 1 : i + 1])
 
     return sma
 
@@ -244,7 +244,7 @@ def calculate_bollinger_bands(
     # Bereken standaarddeviatie
     stdev = np.zeros_like(prices)
     for i in range(period - 1, len(prices)):
-        stdev[i] = np.std(prices[i - period + 1: i + 1])
+        stdev[i] = np.std(prices[i - period + 1 : i + 1])
 
     # Vul eerste waarden met NaN
     stdev[: period - 1] = np.nan

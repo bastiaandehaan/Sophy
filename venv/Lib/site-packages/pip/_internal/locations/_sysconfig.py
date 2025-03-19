@@ -12,7 +12,6 @@ from .base import change_root, get_major_minor_version, is_osx_framework
 
 logger = logging.getLogger(__name__)
 
-
 # Notes on _infer_* functions.
 # Unfortunately ``get_default_scheme()`` didn't exist before 3.10, so there's no
 # way to ask things like "what is the '_prefix' scheme on this platform". These

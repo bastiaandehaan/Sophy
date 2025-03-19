@@ -12,10 +12,8 @@ if sys.version_info >= (3, 8):
 else:
     from pip._vendor.typing_extensions import Literal  # pragma: no cover
 
-
 if TYPE_CHECKING:
     from .console import Console, ConsoleOptions, RenderResult
-
 
 EmojiVariant = Literal["emoji", "text"]
 

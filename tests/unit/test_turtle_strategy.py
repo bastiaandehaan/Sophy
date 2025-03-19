@@ -122,7 +122,7 @@ class TestTurtleStrategy:
         )
 
         # Voeg een breakout toe
-        data.loc[dates[-20]:, "high"] *= 1.02
+        data.loc[dates[-20] :, "high"] *= 1.02
 
         # Bereken indicators
         indicators = turtle_strategy.calculate_indicators(data)
