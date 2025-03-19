@@ -9,11 +9,11 @@ import time
 from datetime import datetime
 
 import pandas as pd
+from src.ftmo.validator.py import FTMOValidator
+
 # Gewijzigd: Gebruik de bestaande backtrader_integration in plaats van advanced_backtester
 from src.analysis.backtrader_integration import BacktestingManager
-
 from src.connector.mt5_connector import MT5Connector
-from src.ftmo.ftmo_validator import FTMOValidator
 from src.risk.risk_manager import RiskManager
 from src.strategy.strategy_factory import StrategyFactory
 from src.utils.config import load_config
@@ -139,7 +139,7 @@ def setup_trading_environment(args):
         backtester = BacktestingManager(config, logger)
 
     # Initialiseer FTMO validator
-    ftmo_validator = FTMOValidator(config, logger)
+    validator.py = FTMOValidator(config, logger)
 
     # Maak een omgevings-dictionary om alles terug te geven
     environment = {
@@ -149,7 +149,7 @@ def setup_trading_environment(args):
         "strategy": strategy,
         "risk_manager": risk_manager,
         "backtester": backtester,
-        "ftmo_validator": ftmo_validator,
+        "validator.py": validator.py,
     }
 
     return environment
@@ -163,7 +163,7 @@ def run_live_trading(args, environment):
     mt5_connector = environment["mt5_connector"]
     strategy = environment["strategy"]
     risk_manager = environment["risk_manager"]
-    ftmo_validator = environment["ftmo_validator"]
+    validator.py = environment["validator.py"]
 
     logger.info("Live trading gestart")
 
@@ -270,7 +270,7 @@ def run_live_trading(args, environment):
             logger.info(f"FTMO Status: {json.dumps(ftmo_status, indent=2)}")
 
             # Valideer FTMO regels
-            ftmo_validator.validate(ftmo_status)
+            validator.py.validate(ftmo_status)
 
             # Wacht tot volgende interval
             logger.info(f"Wachten tot volgende cyclus ({trading_interval} seconden)")
@@ -293,7 +293,7 @@ def run_backtest(args, environment):
     logger = environment["logger"]
     strategy = environment["strategy"]
     backtester = environment["backtester"]
-    ftmo_validator = environment["ftmo_validator"]
+    validator.py = environment["validator.py"]
 
     logger.info("Backtest gestart")
 
@@ -371,7 +371,7 @@ def run_backtest(args, environment):
             start_date=args.start_date,
             end_date=args.end_date,
             timeframe=args.timeframe,
-            plot_results=True
+            plot_results=True,
         )
 
         # Log resultaten
@@ -382,22 +382,25 @@ def run_backtest(args, environment):
         )
         logger.info(f"  - Totaal trades: {backtest_results.get('total_trades', 0)}")
 
-        win_rate = backtest_results.get('performance_stats', {}).get('win_rate', 0)
+        win_rate = backtest_results.get("performance_stats", {}).get("win_rate", 0)
         if win_rate is not None:
             logger.info(f"  - Win rate: {win_rate * 100:.2f}%")
 
-        max_drawdown = backtest_results.get('performance_stats', {}).get('max_drawdown',
-                                                                         0)
+        max_drawdown = backtest_results.get("performance_stats", {}).get(
+            "max_drawdown", 0
+        )
         if max_drawdown is not None:
             logger.info(f"  - Max drawdown: {abs(max_drawdown):.2f}%")
 
         # Controlleer FTMO compliance
-        ftmo_compliance = backtest_results.get("ftmo_compliance",
-                                               {"is_compliant": False})
+        ftmo_compliance = backtest_results.get(
+            "ftmo_compliance", {"is_compliant": False}
+        )
         logger.info(f"FTMO Compliance: {ftmo_compliance.get('is_compliant', False)}")
 
         if not ftmo_compliance.get("is_compliant", False) and ftmo_compliance.get(
-            "reason"):
+            "reason"
+        ):
             reasons = ftmo_compliance.get("reason", [])
             if isinstance(reasons, str):
                 reasons = [reasons]

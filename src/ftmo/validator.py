@@ -3,7 +3,7 @@
 import os
 import re
 from datetime import datetime, date
-from typing import Dict, Tuple, Optional, Any, Union
+from typing import Dict, Tuple, Optional, Any
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -76,7 +76,8 @@ class FTMOValidator:
 
         if self.logger:
             self.logger.log_info(
-                f"FTMO Validator geïnitialiseerd met configuratie: {config['risk']}")
+                f"FTMO Validator geïnitialiseerd met configuratie: {config['risk']}"
+            )
 
     def log_message(self, message: str, level: str = "INFO") -> None:
         """Helper voor logging met fallback naar print"""
@@ -104,7 +105,8 @@ class FTMOValidator:
             df["Date"] = df["Timestamp"].dt.date
             self.log_message(f"Handelsdata geladen uit {self.log_file}")
             return df.dropna(
-                subset=["Timestamp"])  # Verwijder rijen met foutieve timestamps
+                subset=["Timestamp"]
+            )  # Verwijder rijen met foutieve timestamps
         except Exception as e:
             self.log_message(f"Fout bij laden handelsdata: {e}", level="ERROR")
             return pd.DataFrame()
@@ -131,6 +133,7 @@ class FTMOValidator:
 
         # Extraheer balans
         if "Balance" not in status_df.columns or status_df["Balance"].isna().all():
+
             def extract_balance(comment):
                 if isinstance(comment, str) and "Balance: " in comment:
                     match = re.search(r"Balance:\s*([\d,.]+)", comment)
@@ -549,8 +552,9 @@ class FTMOValidator:
         try:
             compliance = self.check_ftmo_compliance(initial_balance)
             if not compliance["details"]:
-                self.log_message("Onvoldoende data voor rapportgeneratie",
-                                 level="ERROR")
+                self.log_message(
+                    "Onvoldoende data voor rapportgeneratie", level="ERROR"
+                )
                 return False
 
             compliance_path = self.plot_ftmo_compliance(initial_balance)

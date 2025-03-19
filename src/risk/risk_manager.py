@@ -38,25 +38,20 @@ class RiskManager:
 
         # Algemene risicoparameters
         self.risk_per_trade = Decimal(
-            str(config.get("risk_per_trade", "0.01"))
-        )  # 1% risico per trade
+            str(config.get("risk_per_trade", "0.01")))  # 1% risico per trade
         self.max_trades_per_day = config.get("max_trades_per_day", 5)
         self.max_trades_per_symbol = config.get("max_trades_per_symbol", 1)
 
         # FTMO-specifieke parameters
         self.initial_balance = Decimal("0")  # Wordt ingesteld tijdens initialisatie
         self.daily_drawdown_limit = Decimal(
-            str(config.get("daily_drawdown_limit", "0.05"))
-        )  # 5% max dagelijks verlies
+            str(config.get("daily_drawdown_limit", "0.05")))  # 5% max dagelijks verlies
         self.total_drawdown_limit = Decimal(
-            str(config.get("total_drawdown_limit", "0.10"))
-        )  # 10% max totaal verlies
+            str(config.get("total_drawdown_limit", "0.10")))  # 10% max totaal verlies
         self.profit_target = Decimal(
-            str(config.get("profit_target", "0.10"))
-        )  # 10% winstdoel
-        self.min_trading_days = config.get(
-            "min_trading_days", 4
-        )  # Min. 4 dagen met trades
+            str(config.get("profit_target", "0.10")))  # 10% winstdoel
+        self.min_trading_days = config.get("min_trading_days",
+                                           4)  # Min. 4 dagen met trades
 
         # State bijhouden
         self.today_trades = 0
@@ -89,8 +84,7 @@ class RiskManager:
             self.initial_balance = Decimal(str(account_info["balance"]))
             self.highest_balance = self.initial_balance
             self.logger.info(
-                f"RiskManager geïnitialiseerd met saldo: {self.initial_balance}"
-            )
+                f"RiskManager geïnitialiseerd met saldo: {self.initial_balance}")
         else:
             self.logger.error("Kon accountinformatie niet ophalen na meerdere pogingen")
             self.is_trading_allowed = False
@@ -167,68 +161,99 @@ class RiskManager:
         risk_pips: Optional[Decimal] = None,
     ) -> float:
         """
-        Bereken de positiegrootte op basis van risico per trade.
+        Calculate position size based on risk per trade.
 
         Args:
-            symbol (str): Handelssymbool.
-            entry_price (Decimal): Ingangsprijs.
-            stop_loss (Optional[Decimal]): Stop-loss prijs (optioneel).
-            risk_pips (Optional[Decimal]): Risico in pips (optioneel).
+            symbol (str): Trading symbol.
+            entry_price (Decimal): Entry price.
+            stop_loss (Optional[Decimal]): Stop-loss price.
+            risk_pips (Optional[Decimal]): Risk in pips.
 
         Returns:
-            float: Volume in lots voor de trade.
+            float: Volume in lots for the trade.
 
         Raises:
-            ValueError: Als essentiële berekeningen ongeldig zijn.
+            ValueError: If essential calculations are invalid.
         """
+        # Check if trading is allowed
         if not self.is_trading_allowed:
             return 0.0
 
         self._update_daily_state()
-
         if self.today_trades >= self.max_trades_per_day:
-            self.logger.warning(f"Max trades vandaag: {self.max_trades_per_day}")
+            self.logger.warning(
+                f"Maximum daily trades reached: {self.max_trades_per_day}")
             return 0.0
 
+        # Get necessary information
         account_info = self._retry_get_account_info()
         symbol_info = self._retry_get_symbol_info(symbol)
         if not account_info or not symbol_info:
-            self.logger.error(f"Kon info niet ophalen voor {symbol}")
+            self.logger.error(f"Could not retrieve information for {symbol}")
             return 0.0
 
+        # Calculate risk amount
         account_balance = Decimal(str(account_info["balance"]))
         risk_amount = account_balance * self.risk_per_trade
 
-        if stop_loss is None and risk_pips is None:
-            self.logger.warning(f"Geen stop-loss voor {symbol}, gebruik standaard 2%")
-            risk_pips = entry_price * Decimal("0.02")
-        elif stop_loss is not None and risk_pips is None:
-            risk_pips = abs(entry_price - stop_loss)
-
-        if risk_pips is None or risk_pips <= Decimal("0"):
-            self.logger.error(f"Ongeldige risk_pips voor {symbol}: {risk_pips}")
+        # Determine risk in pips
+        actual_risk_pips = self._determine_risk_pips(symbol, entry_price, stop_loss,
+                                                     risk_pips)
+        if actual_risk_pips <= Decimal("0"):
+            self.logger.error(
+                f"Invalid risk_pips calculated for {symbol}: {actual_risk_pips}")
             return 0.0
 
+        # Calculate pip value and position size
+        pip_monetary_value = self._calculate_pip_monetary_value(symbol_info)
+        if pip_monetary_value <= Decimal("0"):
+            self.logger.error(f"Invalid pip value for {symbol}: {pip_monetary_value}")
+            return 0.0
+
+        # Calculate and adjust position size
+        volume = risk_amount / (actual_risk_pips * pip_monetary_value)
+        volume = self._adjust_volume_to_market_constraints(volume, symbol_info)
+
+        self.logger.info(f"Calculated volume for {symbol}: {volume} lots")
+        return float(volume)
+
+    def _determine_risk_pips(
+        self,
+        symbol: str,
+        entry_price: Decimal,
+        stop_loss: Optional[Decimal],
+        risk_pips: Optional[Decimal]
+    ) -> Decimal:
+        """Determine risk in pips for the trade."""
+        if stop_loss is None and risk_pips is None:
+            self.logger.warning(f"No stop-loss for {symbol}, using default 2%")
+            return entry_price * Decimal("0.02")
+        elif stop_loss is not None and risk_pips is None:
+            return abs(entry_price - stop_loss)
+        elif risk_pips is not None and risk_pips > Decimal("0"):
+            return risk_pips
+        else:
+            self.logger.error(f"Invalid risk_pips for {symbol}: {risk_pips}")
+            return Decimal("0")
+
+    def _calculate_pip_monetary_value(self, symbol_info: Dict[str, Any]) -> Decimal:
+        """Calculate the monetary value of a pip."""
         pip_value = Decimal(str(symbol_info.get("trade_tick_value", "0.0001")))
         contract_size = Decimal(str(symbol_info.get("trade_contract_size", "100000")))
         tick_size = Decimal(str(symbol_info.get("trade_tick_size", "0.00001")))
         points_per_pip = Decimal("0.0001") / tick_size
-        pip_monetary_value = (pip_value * contract_size) / points_per_pip
+        return (pip_value * contract_size) / points_per_pip
 
-        if pip_monetary_value <= Decimal("0"):
-            self.logger.error(f"Ongeldige pip-waarde voor {symbol}")
-            return 0.0
-
-        volume = risk_amount / (risk_pips * pip_monetary_value)
+    def _adjust_volume_to_market_constraints(
+        self, volume: Decimal, symbol_info: Dict[str, Any]
+    ) -> Decimal:
+        """Adjust the calculated volume to match market constraints."""
         volume_step = Decimal(str(symbol_info.get("volume_step", "0.01")))
         volume = (volume / volume_step).quantize(volume_step) * volume_step
 
         min_volume = Decimal(str(symbol_info.get("volume_min", "0.01")))
         max_volume = Decimal(str(symbol_info.get("volume_max", "100.0")))
-        volume = max(min_volume, min(volume, max_volume))
-
-        self.logger.info(f"Berekend volume voor {symbol}: {volume} lots")
-        return float(volume)
+        return max(min_volume, min(volume, max_volume))
 
     def update_after_trade(
         self, symbol: str, profit_loss: Decimal, close_time: datetime
@@ -293,8 +318,8 @@ class RiskManager:
         total_drawdown = Decimal("0")
         if self.highest_balance > Decimal("0"):
             total_drawdown = (
-                self.highest_balance - current_balance
-            ) / self.highest_balance
+                                 self.highest_balance - current_balance
+                             ) / self.highest_balance
 
         if daily_drawdown >= self.daily_drawdown_limit:
             self.logger.warning(
@@ -309,8 +334,7 @@ class RiskManager:
             self.is_trading_allowed = False
 
         if current_balance >= self.initial_balance * (
-            Decimal("1") + self.profit_target
-        ):
+            Decimal("1") + self.profit_target):
             self.logger.info(
                 f"Winstdoel bereikt: ${current_balance:.2f} >= ${self.initial_balance * (Decimal('1') + self.profit_target):.2f}"
             )

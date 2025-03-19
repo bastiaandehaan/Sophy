@@ -1,7 +1,7 @@
 # src/risk/advanced_position_sizer.py
-from typing import Optional, Union, Dict, Any
+from typing import Optional
+
 import numpy as np
-from decimal import Decimal
 
 
 def adaptive_position_size(
@@ -13,7 +13,7 @@ def adaptive_position_size(
     atr_value: Optional[float] = None,
     market_condition: str = "normal",
     max_portfolio_risk: float = 0.05,
-    current_risk_exposure: float = 0.0
+    current_risk_exposure: float = 0.0,
 ) -> float:
     """
     Berekent de optimale positiegrootte aangepast aan marktvolatiliteit.

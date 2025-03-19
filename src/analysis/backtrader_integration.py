@@ -27,9 +27,16 @@ class BacktestingManager:
 
         self.backtrader_adapter = BacktraderAdapter(config, logger)
 
-    def run_backtest(self, strategy_name: str, symbols: List[str], start_date: str,
-                     end_date: str, timeframe: str = "D1", parameters: Dict = None,
-                     plot_results: bool = True, ) -> Dict[str, Any]:
+    def run_backtest(
+        self,
+        strategy_name: str,
+        symbols: List[str],
+        start_date: str,
+        end_date: str,
+        timeframe: str = "D1",
+        parameters: Dict = None,
+        plot_results: bool = True,
+    ) -> Dict[str, Any]:
         """
         Run a backtest with the specified settings.
 
@@ -49,12 +56,15 @@ class BacktestingManager:
         from src.strategy.strategy_factory import StrategyFactory
 
         # Load the specified strategy
-        strategy = StrategyFactory.create_strategy(strategy_name, connector=None,
-                                                   # Backtester will create mock connector
-                                                   risk_manager=None,
-                                                   # Backtester will create mock risk manager
-                                                   logger=self.logger,
-                                                   config=self.config, )
+        strategy = StrategyFactory.create_strategy(
+            strategy_name,
+            connector=None,
+            # Backtester will create mock connector
+            risk_manager=None,
+            # Backtester will create mock risk manager
+            logger=self.logger,
+            config=self.config,
+        )
 
         self.logger.log_info(f"Running backtest with {strategy_name}")
 
@@ -64,28 +74,30 @@ class BacktestingManager:
             self.backtrader_adapter.add_data(symbol, data, timeframe)
 
         # Run backtest
-        results = self.backtrader_adapter.run_backtest(strategy,
-                                                       debug=self.config.get("debug",
-                                                                             False),
-                                                       risk_per_trade=self.config.get(
-                                                           "risk", {}).get(
-                                                           "risk_per_trade", 0.01), )
+        results = self.backtrader_adapter.run_backtest(
+            strategy,
+            debug=self.config.get("debug", False),
+            risk_per_trade=self.config.get("risk", {}).get("risk_per_trade", 0.01),
+        )
 
         if plot_results:
             # Generate plots
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_dir = self.config.get("output", {}).get("backtest_results_dir",
-                                                           "backtest_results")
+            output_dir = self.config.get("output", {}).get(
+                "backtest_results_dir", "backtest_results"
+            )
             os.makedirs(output_dir, exist_ok=True)
 
-            plot_path = os.path.join(output_dir,
-                                     f"{strategy_name}_backtest_plot_{timestamp}.png")
+            plot_path = os.path.join(
+                output_dir, f"{strategy_name}_backtest_plot_{timestamp}.png"
+            )
             self.backtrader_adapter.plot_results(plot_path)
 
         return results
 
-    def _load_historical_data(self, symbol: str, start_date: str, end_date: str,
-                              timeframe: str) -> pd.DataFrame:
+    def _load_historical_data(
+        self, symbol: str, start_date: str, end_date: str, timeframe: str
+    ) -> pd.DataFrame:
         """
         Load historical data for a symbol.
 
@@ -120,7 +132,8 @@ class BacktestingManager:
         else:
             # Generate test data if file not found
             self.logger.log_info(
-                f"Data file for {symbol} not found, generating test data")
+                f"Data file for {symbol} not found, generating test data"
+            )
             return self._generate_test_data(symbol, start_dt, end_dt)
 
     def _generate_test_data(self, symbol: str, start_dt, end_dt) -> pd.DataFrame:
@@ -160,8 +173,15 @@ class BacktestingManager:
 
         # Create DataFrame
         data = pd.DataFrame(
-            {"date": dates, "open": opens, "high": highs, "low": lows, "close": closes,
-             "volume": volumes, })
+            {
+                "date": dates,
+                "open": opens,
+                "high": highs,
+                "low": lows,
+                "close": closes,
+                "volume": volumes,
+            }
+        )
 
         # Voeg opzettelijke breakouts toe voor turtle strategie
         # Dit zorgt ervoor dat de strategie interessante handelssignalen ziet
@@ -169,24 +189,30 @@ class BacktestingManager:
             breakout_idx = int(len(data) * 0.25 * (i + 1))  # Op 25%, 50%, 75% punt
             if breakout_idx + 5 < len(data):
                 # Creëer een opwaartse breakout
-                data.loc[data.index[breakout_idx:breakout_idx + 5], 'high'] *= 1.03
-                data.loc[data.index[breakout_idx:breakout_idx + 5], 'close'] *= 1.02
+                data.loc[data.index[breakout_idx: breakout_idx + 5], "high"] *= 1.03
+                data.loc[data.index[breakout_idx: breakout_idx + 5], "close"] *= 1.02
 
                 # Creëer ook enkele neerwaartse breakouts
                 reversal_idx = breakout_idx + 15
                 if reversal_idx + 5 < len(data):
-                    data.loc[data.index[reversal_idx:reversal_idx + 5], 'low'] *= 0.97
-                    data.loc[data.index[reversal_idx:reversal_idx + 5], 'close'] *= 0.98
+                    data.loc[data.index[reversal_idx: reversal_idx + 5], "low"] *= 0.97
+                    data.loc[
+                        data.index[reversal_idx: reversal_idx + 5], "close"
+                    ] *= 0.98
 
         return data
 
-    def run_walk_forward_optimization(self, strategy_name: str, symbols: List[str],
-                                      start_date: str, end_date: str,
-                                      timeframe: str = "D1",
-                                      window_size_days: int = 180,
-                                      step_size_days: int = 30,
-                                      param_grid: Dict[str, List] = None) -> Dict[
-        str, Any]:
+    def run_walk_forward_optimization(
+        self,
+        strategy_name: str,
+        symbols: List[str],
+        start_date: str,
+        end_date: str,
+        timeframe: str = "D1",
+        window_size_days: int = 180,
+        step_size_days: int = 30,
+        param_grid: Dict[str, List] = None,
+    ) -> Dict[str, Any]:
         """
         Uitvoeren van walk-forward optimalisatie.
 
@@ -221,7 +247,7 @@ class BacktestingManager:
             param_grid = {
                 "entry_period": [20, 30, 40, 50, 60],
                 "exit_period": [10, 15, 20],
-                "atr_multiplier": [1.5, 2.0, 2.5, 3.0]
+                "atr_multiplier": [1.5, 2.0, 2.5, 3.0],
             }
 
         # Resultaten per window bijhouden
@@ -232,7 +258,8 @@ class BacktestingManager:
         for i, (window_start, window_end) in enumerate(windows):
             window_name = f"Window_{i + 1}"
             self.logger.log_info(
-                f"Optimalisatie voor {window_name}: {window_start.date()} tot {window_end.date()}")
+                f"Optimalisatie voor {window_name}: {window_start.date()} tot {window_end.date()}"
+            )
 
             # Train/test splitsing (80/20)
             train_days = int(window_size_days * 0.8)
@@ -241,17 +268,21 @@ class BacktestingManager:
             # Resultaten voor dit window
             window_results = {
                 "train_period": (
-                window_start.strftime("%Y-%m-%d"), train_end.strftime("%Y-%m-%d")),
+                    window_start.strftime("%Y-%m-%d"),
+                    train_end.strftime("%Y-%m-%d"),
+                ),
                 "test_period": (
-                train_end.strftime("%Y-%m-%d"), window_end.strftime("%Y-%m-%d")),
+                    train_end.strftime("%Y-%m-%d"),
+                    window_end.strftime("%Y-%m-%d"),
+                ),
                 "train_results": [],
                 "test_results": None,
-                "best_params": None
+                "best_params": None,
             }
 
             # Optimalisatie op trainingset
             # Simpele grid search implementatie
-            best_train_sharpe = -float('inf')
+            best_train_sharpe = -float("inf")
             best_params_window = None
 
             # Voor elke parametercombinatie
@@ -265,7 +296,7 @@ class BacktestingManager:
                             "strategy": {
                                 "entry_period": entry_period,
                                 "exit_period": exit_period,
-                                "atr_multiplier": atr_multiplier
+                                "atr_multiplier": atr_multiplier,
                             }
                         }
 
@@ -282,20 +313,24 @@ class BacktestingManager:
                                 start_date=window_start.strftime("%Y-%m-%d"),
                                 end_date=train_end.strftime("%Y-%m-%d"),
                                 timeframe=timeframe,
-                                plot_results=False
+                                plot_results=False,
                             )
 
                             # Bewaar resultaten
                             train_sharpe = train_result.get("sharpe_ratio", 0)
 
                             # Voeg resultaat toe aan trainingresultaten
-                            window_results["train_results"].append({
-                                "params": params["strategy"],
-                                "sharpe": train_sharpe,
-                                "profit_pct": train_result.get("profit_percentage", 0),
-                                "win_rate": train_result.get("win_rate", 0),
-                                "max_drawdown": train_result.get("max_drawdown", 0)
-                            })
+                            window_results["train_results"].append(
+                                {
+                                    "params": params["strategy"],
+                                    "sharpe": train_sharpe,
+                                    "profit_pct": train_result.get(
+                                        "profit_percentage", 0
+                                    ),
+                                    "win_rate": train_result.get("win_rate", 0),
+                                    "max_drawdown": train_result.get("max_drawdown", 0),
+                                }
+                            )
 
                             # Check of dit de beste parameters zijn
                             if train_sharpe > best_train_sharpe:
@@ -303,8 +338,9 @@ class BacktestingManager:
                                 best_params_window = params["strategy"]
 
                         except Exception as e:
-                            self.logger.log_info(f"Fout bij optimalisatie: {e}",
-                                                 level="ERROR")
+                            self.logger.log_info(
+                                f"Fout bij optimalisatie: {e}", level="ERROR"
+                            )
 
             # Sla beste parameters op
             window_results["best_params"] = best_params_window
@@ -324,7 +360,7 @@ class BacktestingManager:
                         start_date=train_end.strftime("%Y-%m-%d"),
                         end_date=window_end.strftime("%Y-%m-%d"),
                         timeframe=timeframe,
-                        plot_results=False
+                        plot_results=False,
                     )
 
                     # Bewaar testresultaten
@@ -333,7 +369,7 @@ class BacktestingManager:
                         "profit_pct": test_result.get("profit_percentage", 0),
                         "win_rate": test_result.get("win_rate", 0),
                         "max_drawdown": test_result.get("max_drawdown", 0),
-                        "total_trades": test_result.get("total_trades", 0)
+                        "total_trades": test_result.get("total_trades", 0),
                     }
 
                     # Log resultaten
@@ -345,8 +381,9 @@ class BacktestingManager:
                     )
 
                 except Exception as e:
-                    self.logger.log_info(f"Fout bij testen van beste parameters: {e}",
-                                         level="ERROR")
+                    self.logger.log_info(
+                        f"Fout bij testen van beste parameters: {e}", level="ERROR"
+                    )
 
             # Sla resultaten op voor dit window
             results[window_name] = window_results
@@ -360,13 +397,14 @@ class BacktestingManager:
             "windows": results,
             "parameter_stability": param_stability,
             "out_of_sample_performance": self._calculate_out_of_sample_stats(results),
-            "best_overall_params": self._find_best_overall_params(results)
+            "best_overall_params": self._find_best_overall_params(results),
         }
 
         return overall_results
 
-    def _analyze_parameter_stability(self, best_params: Dict[str, Dict]) -> Dict[
-        str, Any]:
+    def _analyze_parameter_stability(
+        self, best_params: Dict[str, Dict]
+    ) -> Dict[str, Any]:
         """
         Analyseer de stabiliteit van parameters over verschillende windows.
 
@@ -397,9 +435,12 @@ class BacktestingManager:
                     "min": min(values),
                     "max": max(values),
                     "mean": sum(values) / len(values),
-                    "range_pct": (max(values) - min(values)) / max(values) * 100 if max(
-                        values) > 0 else 0,
-                    "values": values
+                    "range_pct": (
+                        (max(values) - min(values)) / max(values) * 100
+                        if max(values) > 0
+                        else 0
+                    ),
+                    "values": values,
                 }
 
         # Bepaal stabiliteit
@@ -412,11 +453,12 @@ class BacktestingManager:
         return {
             "stable": len(unstable_params) == 0,
             "unstable_params": unstable_params,
-            "variations": param_variations
+            "variations": param_variations,
         }
 
-    def _calculate_out_of_sample_stats(self, results: Dict[str, Dict]) -> Dict[
-        str, float]:
+    def _calculate_out_of_sample_stats(
+        self, results: Dict[str, Dict]
+    ) -> Dict[str, float]:
         """
         Bereken statistieken over out-of-sample prestaties.
 
@@ -438,7 +480,8 @@ class BacktestingManager:
                 test_sharpes.append(window_data["test_results"].get("sharpe", 0))
                 test_win_rates.append(window_data["test_results"].get("win_rate", 0))
                 test_drawdowns.append(
-                    window_data["test_results"].get("max_drawdown", 0))
+                    window_data["test_results"].get("max_drawdown", 0)
+                )
 
         # Return lege resultaten als geen testdata beschikbaar is
         if not test_profits:
@@ -448,7 +491,7 @@ class BacktestingManager:
                 "avg_win_rate": 0,
                 "avg_drawdown": 0,
                 "profit_consistency": 0,
-                "windows_profitable": 0
+                "windows_profitable": 0,
             }
 
         # Bereken statistieken
@@ -467,7 +510,7 @@ class BacktestingManager:
             "avg_win_rate": avg_win_rate,
             "avg_drawdown": avg_drawdown,
             "profit_consistency": profit_consistency,
-            "windows_profitable": profitable_windows
+            "windows_profitable": profitable_windows,
         }
 
     def _find_best_overall_params(self, results: Dict[str, Dict]) -> Dict[str, Any]:
@@ -487,21 +530,23 @@ class BacktestingManager:
             if window_data.get("best_params") and window_data.get("test_results"):
                 # Converteer params naar een tuple om te gebruiken als dictionary key
                 param_key = tuple(
-                    sorted((k, v) for k, v in window_data["best_params"].items()))
+                    sorted((k, v) for k, v in window_data["best_params"].items())
+                )
 
                 if param_key not in param_results:
                     param_results[param_key] = {
                         "params": window_data["best_params"],
                         "test_results": [],
-                        "windows": []
+                        "windows": [],
                     }
 
                 param_results[param_key]["test_results"].append(
-                    window_data["test_results"])
+                    window_data["test_results"]
+                )
                 param_results[param_key]["windows"].append(window_name)
 
         # Vind de parameterset met hoogste gemiddelde Sharpe ratio
-        best_avg_sharpe = -float('inf')
+        best_avg_sharpe = -float("inf")
         best_params = None
 
         for param_key, data in param_results.items():
@@ -521,9 +566,15 @@ class BacktestingManager:
             "parameters": best_params,
             "metrics": {
                 "avg_out_of_sample_sharpe": best_avg_sharpe,
-                "frequency": len([w for pk, data in param_results.items()
-                                  if data["params"] == best_params
-                                  for w in data["windows"]]) / sum(
-                    len(data["windows"]) for data in param_results.values())
-            }
+                "frequency": len(
+                    [
+                        w
+                        for pk, data in param_results.items()
+                        if data["params"] == best_params
+                        for w in data["windows"]
+                    ]
+                )
+                             / sum(
+                    len(data["windows"]) for data in param_results.values()),
+            },
         }

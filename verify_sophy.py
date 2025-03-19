@@ -1,4 +1,4 @@
- #!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 Sophy Framework Verificatiescript
 
@@ -46,7 +46,7 @@ def test_imports():
         "src.strategy.strategy_factory",
         "src.strategy.base_strategy",
         "src.analysis.backtester",
-        "src.ftmo.ftmo_validator",
+        "src.ftmo.validator.py",
     ]
 
     all_passed = True

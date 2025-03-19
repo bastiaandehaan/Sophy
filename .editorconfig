@@ -15,8 +15,6 @@ max_line_length = 88
 # YAML-specifieke instellingen
 [*.{yml,yaml}]
 indent_size = 2
-end_of_line = lf
-insert_final_newline = true
 
 # JSON-configuratiebestanden
 [*.json]
@@ -28,4 +26,4 @@ trim_trailing_whitespace = false
 
 # Shell scripts
 [*.sh]
-end_of_line = lf
+# Geen extra instellingen nodig, want end_of_line = lf is al ingesteld in [*]

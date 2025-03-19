@@ -10,8 +10,8 @@ class SophyStrategyAdapter(bt.Strategy):
     """
 
     params = (
-        ('sophy_strategy', None),  # Sophy strategie instance
-        ('risk_per_trade', 0.01),  # Risico per trade
+        ("sophy_strategy", None),  # Sophy strategie instance
+        ("risk_per_trade", 0.01),  # Risico per trade
     )
 
     def __init__(self):
@@ -39,8 +39,9 @@ class SophyStrategyAdapter(bt.Strategy):
         # Verkrijg signaal
         symbol = self.datas[0]._name
         current_position = self._get_current_position(symbol)
-        signal = self.sophy_strategy.generate_signal(symbol, data, indicators,
-                                                     current_position)
+        signal = self.sophy_strategy.generate_signal(
+            symbol, data, indicators, current_position
+        )
 
         # Verwerk signaal
         self._process_signal(signal, symbol)
@@ -52,11 +53,11 @@ class SophyStrategyAdapter(bt.Strategy):
 
         # Placeholder implementatie
         return {
-            'open': self.datas[0].open,
-            'high': self.datas[0].high,
-            'low': self.datas[0].low,
-            'close': self.datas[0].close,
-            'volume': self.datas[0].volume
+            "open": self.datas[0].open,
+            "high": self.datas[0].high,
+            "low": self.datas[0].low,
+            "close": self.datas[0].close,
+            "volume": self.datas[0].volume,
         }
 
     def _get_current_position(self, symbol: str) -> Optional[str]:
@@ -79,9 +80,9 @@ class SophyStrategyAdapter(bt.Strategy):
             signal: Signaal dictionary met action, params, etc.
             symbol: Symbool waarop het signaal betrekking heeft
         """
-        action = signal.get('action', 'NONE')
+        action = signal.get("action", "NONE")
 
-        if action == 'BUY' and self.position.size <= 0:
+        if action == "BUY" and self.position.size <= 0:
             # Sluit eventuele short positie
             if self.position.size < 0:
                 self.close()
@@ -94,7 +95,7 @@ class SophyStrategyAdapter(bt.Strategy):
             self.orders[symbol] = self.buy(size=size)
             self.positions[symbol] = "BUY"
 
-        elif action == 'SELL' and self.position.size >= 0:
+        elif action == "SELL" and self.position.size >= 0:
             # Sluit eventuele long positie
             if self.position.size > 0:
                 self.close()
@@ -107,7 +108,7 @@ class SophyStrategyAdapter(bt.Strategy):
             self.orders[symbol] = self.sell(size=size)
             self.positions[symbol] = "SELL"
 
-        elif action == 'CLOSE':
+        elif action == "CLOSE":
             # Sluit positie
             if self.position.size != 0:
                 self.close()
@@ -126,7 +127,7 @@ class SophyStrategyAdapter(bt.Strategy):
             Positiegrootte
         """
         # Gebruik stop-loss indien aanwezig
-        stop_loss = signal.get('stop_loss')
+        stop_loss = signal.get("stop_loss")
         if stop_loss:
             # Bereken risico per trade
             account_value = self.broker.getvalue()

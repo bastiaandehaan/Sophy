@@ -5,7 +5,7 @@ Integratie test voor een volledige trading workflow.
 Deze test valideert de samenwerking tussen alle componenten van het Sophy Trading System.
 """
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pandas as pd
 import pytest
@@ -13,7 +13,6 @@ import pytest
 from src.connector.mt5_connector import MT5Connector
 from src.risk.risk_manager import RiskManager
 from src.strategy.strategy_factory import StrategyFactory
-from src.utils.config import load_config
 from src.utils.logger import Logger
 
 
@@ -22,27 +21,21 @@ def mock_setup():
     """Fixture voor het opzetten van mocks voor alle componenten."""
     # Setup mock configuration
     config = {
-        "mt5": {
-            "symbols": ["EURUSD", "GBPUSD"],
-            "timeframe": "H4"
-        },
+        "mt5": {"symbols": ["EURUSD", "GBPUSD"], "timeframe": "H4"},
         "risk": {
             "risk_per_trade": 0.01,
             "max_daily_drawdown": 0.05,
             "total_drawdown_limit": 0.10,
-            "max_trades_per_day": 5
+            "max_trades_per_day": 5,
         },
         "strategy": {
             "name": "turtle",
             "entry_period": 20,
             "exit_period": 10,
             "atr_period": 14,
-            "atr_multiplier": 2.0
+            "atr_multiplier": 2.0,
         },
-        "logging": {
-            "log_file": "tests/logs/test_workflow.csv",
-            "log_level": "INFO"
-        }
+        "logging": {"log_file": "tests/logs/test_workflow.csv", "log_level": "INFO"},
     }
 
     # Create logger
@@ -64,7 +57,7 @@ def mock_setup():
         "equity": 100000,
         "margin": 1000,
         "free_margin": 99000,
-        "margin_level": 10000
+        "margin_level": 10000,
     }
     connector.get_account_info.return_value = account_info
     connector.get_position.return_value = None
@@ -81,7 +74,7 @@ def mock_setup():
         "logger": logger,
         "connector": connector,
         "risk_manager": risk_manager,
-        "mt5_mock": mt5_mock
+        "mt5_mock": mt5_mock,
     }
 
 
@@ -101,13 +94,16 @@ def _create_test_data():
     prices = prices + noise
 
     # Maak OHLC data
-    df = pd.DataFrame({
-        "open": prices,
-        "high": prices * 1.001,
-        "low": prices * 0.999,
-        "close": prices + np.random.normal(0, 0.0001, 100),
-        "tick_volume": np.random.randint(100, 1000, 100)
-    }, index=dates)
+    df = pd.DataFrame(
+        {
+            "open": prices,
+            "high": prices * 1.001,
+            "low": prices * 0.999,
+            "close": prices + np.random.normal(0, 0.0001, 100),
+            "tick_volume": np.random.randint(100, 1000, 100),
+        },
+        index=dates,
+    )
 
     # Voeg een duidelijke breakout toe voor signaaldetectie
     breakout_idx = 80
@@ -164,7 +160,8 @@ class TestTradingWorkflow(unittest.TestCase):
 
         # Controleer FTMO limieten
         should_stop, reason = risk_manager.check_ftmo_limits(
-            connector.get_account_info())
+            connector.get_account_info()
+        )
 
         # Log de resultaten
         logger.log_info.assert_called()
@@ -205,10 +202,16 @@ class TestTradingWorkflow(unittest.TestCase):
 
         # Verwerk nog een symbool, zou geen handel moeten genereren
         result = strategy.process_symbol(symbol)
-        self.assertNotEqual(result.get("signal"), "BUY",
-                            "Geen BUY signaal verwacht bij is_trading_allowed=False")
-        self.assertNotEqual(result.get("signal"), "SELL",
-                            "Geen SELL signaal verwacht bij is_trading_allowed=False")
+        self.assertNotEqual(
+            result.get("signal"),
+            "BUY",
+            "Geen BUY signaal verwacht bij is_trading_allowed=False",
+        )
+        self.assertNotEqual(
+            result.get("signal"),
+            "SELL",
+            "Geen SELL signaal verwacht bij is_trading_allowed=False",
+        )
 
     def test_multiple_symbols_handling(self, mock_setup):
         """
@@ -240,15 +243,20 @@ class TestTradingWorkflow(unittest.TestCase):
             results[symbol] = strategy.process_symbol(symbol)
 
         # Controleer resultaten voor elk symbool
-        self.assertEqual(len(results), len(config["mt5"]["symbols"]),
-                         "Moet resultaten hebben voor alle symbolen")
+        self.assertEqual(
+            len(results),
+            len(config["mt5"]["symbols"]),
+            "Moet resultaten hebben voor alle symbolen",
+        )
 
         # Controleer dat elk resultaat de juiste structuur heeft
         for symbol, result in results.items():
-            self.assertIn("signal", result,
-                          f"Resultaat voor {symbol} mist 'signal' sleutel")
-            self.assertIn("meta", result,
-                          f"Resultaat voor {symbol} mist 'meta' sleutel")
+            self.assertIn(
+                "signal", result, f"Resultaat voor {symbol} mist 'signal' sleutel"
+            )
+            self.assertIn(
+                "meta", result, f"Resultaat voor {symbol} mist 'meta' sleutel"
+            )
 
 
 if __name__ == "__main__":

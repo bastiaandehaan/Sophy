@@ -15,7 +15,7 @@ src/connector/__init__.py
 src/connector/mt5_connector.py
 src/ftmo/__init__.py
 src/ftmo/ftmo_helper.py
-src/ftmo/ftmo_validator.py
+src/ftmo/validator.py.py
 src/monitoring/__init__.py
 src/presentation/__init__.py
 src/presentation/dashboard.py

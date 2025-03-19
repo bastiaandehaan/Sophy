@@ -129,13 +129,15 @@ def run_backtest(config, args, logger):
         btm = BacktestingManager(config, logger)
 
         # Bepaal parameters voor backtest
-        strategy_name = config['strategy']['name']
-        symbols = config['mt5']['symbols']
-        timeframe = config.get('timeframe',
-                               config.get('mt5', {}).get('timeframe', 'D1'))
-        start_date = config.get('backtest', {}).get('start_date', '2020-01-01')
-        end_date = config.get('backtest', {}).get('end_date',
-                                                  datetime.now().strftime('%Y-%m-%d'))
+        strategy_name = config["strategy"]["name"]
+        symbols = config["mt5"]["symbols"]
+        timeframe = config.get(
+            "timeframe", config.get("mt5", {}).get("timeframe", "D1")
+        )
+        start_date = config.get("backtest", {}).get("start_date", "2020-01-01")
+        end_date = config.get("backtest", {}).get(
+            "end_date", datetime.now().strftime("%Y-%m-%d")
+        )
 
         # Voer backtest uit
         results = btm.run_backtest(
@@ -144,12 +146,12 @@ def run_backtest(config, args, logger):
             start_date=start_date,
             end_date=end_date,
             timeframe=timeframe,
-            plot_results=args.visualize
+            plot_results=args.visualize,
         )
 
         # Voer FTMO validatie uit indien gewenst
         if args.validate:
-            from src.ftmo.ftmo_validator import FTMOValidator
+            from src.ftmo.validator.py import FTMOValidator
 
             validator = FTMOValidator(config, logger.log_file, logger=logger)
             validator.generate_trading_report()

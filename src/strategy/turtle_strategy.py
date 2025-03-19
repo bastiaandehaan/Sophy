@@ -36,20 +36,27 @@ class TurtleStrategy(Strategy):
         strategy_config = config.get("strategy", {})
 
         # Turtle specifieke parameters
-        self.entry_period = strategy_config.get("entry_period",
-            20)  # Klassieke waarde: 20-dagen breakout
-        self.exit_period = strategy_config.get("exit_period",
-            10)  # Klassieke waarde: 10-dagen breakout
-        self.atr_period = strategy_config.get("atr_period",
-            14)  # ATR berekening periode
-        self.atr_multiplier = strategy_config.get("atr_multiplier",
-            2.0)  # N-voud van ATR voor stops
-        self.units = strategy_config.get("units",
-            1)  # Aantal te nemen units (in originele strategie: 1 tot 4)
-        self.use_filters = strategy_config.get("use_filters",
-            True)  # Gebruik trendfilters
-        self.filter_period = strategy_config.get("filter_period",
-            50)  # Periode voor trendfilter
+        self.entry_period = strategy_config.get(
+            "entry_period", 20
+        )  # Klassieke waarde: 20-dagen breakout
+        self.exit_period = strategy_config.get(
+            "exit_period", 10
+        )  # Klassieke waarde: 10-dagen breakout
+        self.atr_period = strategy_config.get(
+            "atr_period", 14
+        )  # ATR berekening periode
+        self.atr_multiplier = strategy_config.get(
+            "atr_multiplier", 2.0
+        )  # N-voud van ATR voor stops
+        self.units = strategy_config.get(
+            "units", 1
+        )  # Aantal te nemen units (in originele strategie: 1 tot 4)
+        self.use_filters = strategy_config.get(
+            "use_filters", True
+        )  # Gebruik trendfilters
+        self.filter_period = strategy_config.get(
+            "filter_period", 50
+        )  # Periode voor trendfilter
 
         # Swing trading modus (optioneel, voor turtle_swing variant)
         self.swing_mode = strategy_config.get("swing_mode", False)
@@ -58,10 +65,12 @@ class TurtleStrategy(Strategy):
         self.positions = {}  # Bijhouden van open posities per symbool
         self.last_breakout_prices = {}  # Laatste breakout niveau per symbool
 
-        self.logger.info(f"Turtle Strategy geïnitialiseerd: entry={self.entry_period}, "
-                         f"exit={self.exit_period}, ATR={self.atr_period}, "
-                         f"multiplier={self.atr_multiplier}, units={self.units}, "
-                         f"swing_mode={self.swing_mode}")
+        self.logger.info(
+            f"Turtle Strategy geïnitialiseerd: entry={self.entry_period}, "
+            f"exit={self.exit_period}, ATR={self.atr_period}, "
+            f"multiplier={self.atr_multiplier}, units={self.units}, "
+            f"swing_mode={self.swing_mode}"
+        )
 
     def process_symbol(self, symbol: str) -> Dict[str, Any]:
         """
@@ -79,16 +88,22 @@ class TurtleStrategy(Strategy):
         timeframe = self.config.get("timeframe", "D1")
 
         # Bereken hoeveel bars we nodig hebben
-        bars_needed = (max(self.entry_period, self.exit_period, self.atr_period,
-            self.filter_period) + 50)
+        bars_needed = (
+            max(
+                self.entry_period, self.exit_period, self.atr_period, self.filter_period
+            )
+            + 50
+        )
 
         # Haal historische data op via connector
-        data = self.connector.get_historical_data(symbol=symbol, timeframe=timeframe,
-            num_bars=bars_needed)
+        data = self.connector.get_historical_data(
+            symbol=symbol, timeframe=timeframe, num_bars=bars_needed
+        )
 
         if data is None or len(data) < bars_needed:
             self.logger.warning(
-                f"Onvoldoende data voor {symbol} om signalen te genereren")
+                f"Onvoldoende data voor {symbol} om signalen te genereren"
+            )
             return {"signal": "GEEN", "meta": {"reason": "onvoldoende_data"}}
 
         # Bereken indicators en signalen
@@ -97,7 +112,8 @@ class TurtleStrategy(Strategy):
         # Bepaal huidige positie
         current_position = self.get_position(symbol)
         position_direction = (
-            current_position.get("direction", None) if current_position else None)
+            current_position.get("direction", None) if current_position else None
+        )
 
         # Genereer signaal op basis van indicators en huidige positie
         return self._generate_signal(symbol, data, indicators, position_direction)
@@ -130,8 +146,16 @@ class TurtleStrategy(Strategy):
         # Trendfilter (optioneel)
         if self.use_filters:
             data["ma"] = data["close"].rolling(window=self.filter_period).mean()
-            trend_up = data["close"].iloc[-1] > data["ma"].iloc[-1] if not data["ma"].isna().iloc[-1] else True
-            trend_down = data["close"].iloc[-1] < data["ma"].iloc[-1] if not data["ma"].isna().iloc[-1] else True
+            trend_up = (
+                data["close"].iloc[-1] > data["ma"].iloc[-1]
+                if not data["ma"].isna().iloc[-1]
+                else True
+            )
+            trend_down = (
+                data["close"].iloc[-1] < data["ma"].iloc[-1]
+                if not data["ma"].isna().iloc[-1]
+                else True
+            )
         else:
             trend_up = True
             trend_down = True
@@ -165,9 +189,13 @@ class TurtleStrategy(Strategy):
             "trend_down": trend_down,
         }
 
-    def _generate_signal(self, symbol: str, data: pd.DataFrame,
-        indicators: Dict[str, Any], current_direction: Optional[str], ) -> Dict[
-        str, Any]:
+    def _generate_signal(
+        self,
+        symbol: str,
+        data: pd.DataFrame,
+        indicators: Dict[str, Any],
+        current_direction: Optional[str],
+    ) -> Dict[str, Any]:
         """
         Genereer een handelssignaal op basis van de berekende indicators.
 
@@ -192,8 +220,13 @@ class TurtleStrategy(Strategy):
 
         # Standaard geen signaal
         signal = "GEEN"
-        meta = {"atr": current_atr, "entry_price": None, "stop_loss": None,
-            "risk_pips": None, "reason": None, }
+        meta = {
+            "atr": current_atr,
+            "entry_price": None,
+            "stop_loss": None,
+            "risk_pips": None,
+            "reason": None,
+        }
 
         # Entry logica - als we geen positie hebben
         if not current_direction:
@@ -242,9 +275,11 @@ class TurtleStrategy(Strategy):
         # Aanpassingen voor swing modus (indien ingeschakeld)
         if self.swing_mode and signal in ["BUY", "SELL"]:
             # In swing modus nemen we minder risico met strakker stops
-            meta["stop_loss"] = (meta["entry_price"] - (
-                    self.atr_multiplier * 0.75 * current_atr) if signal == "BUY" else
-            meta["entry_price"] + (self.atr_multiplier * 0.75 * current_atr))
+            meta["stop_loss"] = (
+                meta["entry_price"] - (self.atr_multiplier * 0.75 * current_atr)
+                if signal == "BUY"
+                else meta["entry_price"] + (self.atr_multiplier * 0.75 * current_atr)
+            )
             meta["risk_pips"] = self.atr_multiplier * 0.75 * current_atr
             meta["reason"] += "_swing"
 
@@ -294,8 +329,15 @@ class TurtleStrategy(Strategy):
         # Als geen connector, gebruik lokale administratie
         return self.positions
 
-    def on_order_filled(self, symbol: str, order_type: str, price: float, volume: float,
-        order_id: str, timestamp: str, ) -> None:
+    def on_order_filled(
+        self,
+        symbol: str,
+        order_type: str,
+        price: float,
+        volume: float,
+        order_id: str,
+        timestamp: str,
+    ) -> None:
         """
         Verwerk een gevulde order en update de positie administratie.
 
@@ -311,11 +353,17 @@ class TurtleStrategy(Strategy):
             direction = order_type
 
             # Nieuwe positie registreren
-            self.positions[symbol] = {"direction": direction, "entry_price": price,
-                "volume": volume, "order_id": order_id, "entry_time": timestamp, }
+            self.positions[symbol] = {
+                "direction": direction,
+                "entry_price": price,
+                "volume": volume,
+                "order_id": order_id,
+                "entry_time": timestamp,
+            }
 
             self.logger.info(
-                f"Nieuwe {direction} positie in {symbol}: prijs={price}, volume={volume}")
+                f"Nieuwe {direction} positie in {symbol}: prijs={price}, volume={volume}"
+            )
 
         elif order_type in ["CLOSE_BUY", "CLOSE_SELL"]:
             # Positie verwijderen uit administratie na sluiting
@@ -331,13 +379,15 @@ class TurtleStrategy(Strategy):
 
                 self.logger.info(
                     f"Positie gesloten in {symbol}: entry={entry_price}, exit={price}, "
-                    f"P/L={profit_loss}")
+                    f"P/L={profit_loss}"
+                )
 
                 # Verwijder positie uit administratie
                 del self.positions[symbol]
 
-    def calculate_position_trailing_stop(self, symbol: str, current_price: float) -> \
-    Optional[float]:
+    def calculate_position_trailing_stop(
+        self, symbol: str, current_price: float
+    ) -> Optional[float]:
         """
         Bereken een trailing stop voor een bestaande positie volgens Turtle regels.
 

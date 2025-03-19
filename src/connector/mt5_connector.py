@@ -1,5 +1,8 @@
 # src/connector/mt5_connector.py
+# Voeg deze import toe bovenaan de file:
+import os
 import time
+from datetime import datetime
 from typing import Dict, List, Optional, Any, Union
 
 import MetaTrader5 as mt5
@@ -44,54 +47,148 @@ class MT5Connector:
             10019: "Geen respons van server",
         }
 
-    def connect(self) -> bool:
+    def connect(self, show_dialog: bool = True) -> bool:
         """
-        Maak verbinding met MT5 met uitgebreide foutafhandeling.
+        Verbinding maken met het MT5 platform met verbeterde foutafhandeling.
+
+        Args:
+            show_dialog (bool): Of het dialoogvenster getoond moet worden bij inlogproblemen.
 
         Returns:
-            bool: True als verbinding succesvol, False anders.
+            bool: True als verbinding succesvol, anders False.
         """
-        if mt5.terminal_info() is not None and self.connected:
-            self.logger.log_info("Al verbonden met MT5")
+        if self.connected:
+            self.logger.log_info("Reeds verbonden met MT5")
             return True
 
-        mt5.shutdown()
+        # Controleren of MT5 geïmporteerd kon worden
+        if mt5 is None:
+            self.logger.log_info("MetaTrader5 module niet beschikbaar", level="ERROR")
+            return False
 
-        self.logger.log_info(
-            f"Verbinden met MT5 op pad: {self.config.get('mt5_pathway', 'standaard pad')}"
-        )
-        init_result = mt5.initialize(
-            path=self.config.get("mt5_pathway"),
-            login=self.config.get("login"),
-            password=self.config.get("password"),
-            server=self.config.get("server"),
-        )
+        # Initialiseren van MT5
+        self.logger.log_info("Verbinding maken met MT5...")
 
-        if not init_result:
-            error_code = mt5.last_error()
-            error_message = self.error_messages.get(
-                error_code, f"Onbekende MT5 error: {error_code}"
-            )
+        # Path valideren
+        path = self.config.get("mt5_path", "")
+        if not path or not os.path.exists(path):
+            self.logger.log_info(f"MT5 pad niet gevonden: {path}", level="ERROR")
+            self.logger.log_info("Zoeken naar standaard installatiepaden...")
+
+            # Standaard installatielocaties proberen
+            possible_paths = [
+                r"C:\Program Files\MetaTrader 5\terminal64.exe",
+                r"C:\Program Files (x86)\MetaTrader 5\terminal.exe",
+                # Voeg meer standaard paden toe indien nodig
+            ]
+
+            for p in possible_paths:
+                if os.path.exists(p):
+                    path = p
+                    self.logger.log_info(f"MT5 gevonden op: {path}")
+                    break
+
+        # Probeer te initialiseren
+        initialized = False
+        retries = 3
+
+        for attempt in range(retries):
+            try:
+                if path and os.path.exists(path):
+                    initialized = mt5.initialize(path=path)
+                else:
+                    # Probeer zonder pad
+                    initialized = mt5.initialize()
+
+                if initialized:
+                    break
+
+                error_code = mt5.last_error()
+                self.logger.log_info(
+                    f"MT5 initialisatie mislukt: {error_code[0]} - {error_code[1]}",
+                    level="ERROR",
+                )
+
+            except Exception as e:
+                self.logger.log_info(
+                    f"Fout bij MT5 initialisatie: {str(e)}", level="ERROR"
+                )
+
+            if attempt < retries - 1:
+                self.logger.log_info(
+                    f"Poging {attempt + 1} mislukt, opnieuw proberen..."
+                )
+                time.sleep(2)
+
+        if not initialized:
             self.logger.log_info(
-                f"MT5 initialisatie mislukt: {error_message}", level="ERROR"
+                f"Kon MT5 niet initialiseren na {retries} pogingen", level="ERROR"
             )
             return False
 
-        if not mt5.terminal_info():
-            self.logger.log_info("MT5 terminal info niet beschikbaar", level="ERROR")
-            return False
+        # Inloggen indien nodig
+        login_required = False
+        account_info = mt5.account_info()
 
+        if account_info is None:
+            login_required = True
+
+        if login_required:
+            login = self.config.get("mt5_login", 0)
+            password = self.config.get("mt5_password", "")
+            server = self.config.get("mt5_server", "")
+
+            if login and password:
+                self.logger.log_info(f"Inloggen bij account {login} op {server}...")
+
+                login_result = False
+                for attempt in range(retries):
+                    try:
+                        login_result = mt5.login(login, password, server)
+                        if login_result:
+                            break
+
+                        error_code = mt5.last_error()
+                        self.logger.log_info(
+                            f"MT5 login mislukt: {error_code[0]} - {error_code[1]}",
+                            level="ERROR",
+                        )
+
+                    except Exception as e:
+                        self.logger.log_info(
+                            f"Fout bij inloggen: {str(e)}", level="ERROR"
+                        )
+
+                    if attempt < retries - 1:
+                        self.logger.log_info(
+                            f"Login poging {attempt + 1} mislukt, opnieuw proberen..."
+                        )
+                        time.sleep(2)
+
+                if not login_result:
+                    self.logger.log_info("MT5 login mislukt", level="ERROR")
+                    if show_dialog:
+                        # Dialoogvenster tonen indien nodig
+                        pass  # Implementatie afhankelijk van je UI
+                    return False
+            elif show_dialog:
+                self.logger.log_info("Geen inloggegevens gevonden", level="WARNING")
+                # Dialoogvenster tonen indien nodig
+                pass  # Implementatie afhankelijk van je UI
+
+        # Verbinding is nu succesvol
         self.connected = True
         account_info = mt5.account_info()
+
         if account_info:
             self.logger.log_info(
-                f"Verbonden met MT5 account: {account_info.login}, "
-                f"Server: {account_info.server}, "
-                f"Type: {account_info.trade_mode_description}"
+                f"Verbonden met account: {account_info.login} ({account_info.company})"
             )
-            return True
-        self.logger.log_info("Kon geen account info ophalen", level="ERROR")
-        return False
+            self.logger.log_info(
+                f"Balans: {account_info.balance} {account_info.currency}"
+            )
+
+        return True
 
     def disconnect(self) -> None:
         """Sluit verbinding met MT5."""
@@ -149,7 +246,12 @@ class MT5Connector:
         return timeframe
 
     def get_historical_data(
-        self, symbol: str, timeframe_or_str: Union[str, int], bars_count: int = 100
+        self,
+        symbol: str,
+        timeframe_or_str: Union[str, int],
+        bars_count: int = 100,
+        start_pos: int = 0,
+        from_date: Optional[datetime] = None,
     ) -> pd.DataFrame:
         """
         Haal historische prijsdata op met geoptimaliseerde verwerking.
@@ -158,6 +260,8 @@ class MT5Connector:
             symbol (str): Handelssymbool.
             timeframe_or_str (Union[str, int]): MT5 timeframe constante of string ('H4', etc.).
             bars_count (int): Aantal bars om op te halen.
+            start_pos (int): Startpositie voor het ophalen van data (standaard 0).
+            from_date (Optional[datetime]): Startdatum voor het ophalen van data (heeft voorrang op start_pos).
 
         Returns:
             pd.DataFrame: DataFrame met historische data.
@@ -166,20 +270,46 @@ class MT5Connector:
             self.logger.log_info("Niet verbonden met MT5", level="ERROR")
             return pd.DataFrame()
 
+        # Input validatie
+        if not symbol or not isinstance(symbol, str):
+            self.logger.log_info("Ongeldig symbool opgegeven", level="ERROR")
+            return pd.DataFrame()
+
+        if bars_count <= 0:
+            self.logger.log_info("Aantal bars moet groter zijn dan 0", level="ERROR")
+            return pd.DataFrame()
+
         timeframe = timeframe_or_str
         if isinstance(timeframe_or_str, str):
             timeframe = self.get_timeframe_constant(timeframe_or_str)
 
         retries = 3
         for attempt in range(retries):
-            rates = mt5.copy_rates_from_pos(symbol, timeframe, 0, bars_count)
-            if rates is not None and len(rates) > 0:
-                break
-            if attempt < retries - 1:
-                self.logger.log_info(
-                    f"Poging {attempt + 1} mislukt om data op te halen voor {symbol}, opnieuw proberen..."
-                )
-                time.sleep(1)
+            try:
+                if from_date is not None:
+                    # Haal data op vanaf specifieke datum als opgegeven
+                    rates = mt5.copy_rates_from(
+                        symbol, timeframe, from_date, bars_count
+                    )
+                else:
+                    # Anders gebruik de positie
+                    rates = mt5.copy_rates_from_pos(
+                        symbol, timeframe, start_pos, bars_count
+                    )
+
+                if rates is not None and len(rates) > 0:
+                    break
+                if attempt < retries - 1:
+                    self.logger.log_info(
+                        f"Poging {attempt + 1} mislukt om data op te halen voor {symbol}, opnieuw proberen..."
+                    )
+                    time.sleep(1)
+            except Exception as e:
+                self.logger.log_info(f"Fout bij ophalen data: {str(e)}", level="ERROR")
+                if attempt < retries - 1:
+                    time.sleep(1)
+                else:
+                    return pd.DataFrame()
 
         if rates is None or len(rates) == 0:
             self.logger.log_info(
@@ -192,6 +322,10 @@ class MT5Connector:
         df["time"] = pd.to_datetime(df["time"], unit="s")
         df.columns = [col.lower() for col in df.columns]  # Correcte kolomnamen
         df.rename(columns={"time": "date"}, inplace=True)
+
+        # Log het aantal opgehaalde bars
+        self.logger.log_info(f"Succesvol {len(df)} bars opgehaald voor {symbol}")
+
         return df
 
     def get_symbol_tick(self, symbol: str) -> Optional[mt5.Tick]:
@@ -218,7 +352,7 @@ class MT5Connector:
             return None
         return tick
 
-    def get_open_positions(self, symbol: Optional[str] = None) -> List[mt5.Position]:
+    def get_open_positions(self, symbol: Optional[str] = None) -> List[Any]:
         """
         Haal open posities op.
 
@@ -245,89 +379,168 @@ class MT5Connector:
 
     def place_order(
         self,
-        action: str,
         symbol: str,
+        order_type: str,
         volume: float,
-        stop_loss: float = 0,
-        take_profit: float = 0,
+        price: Optional[float] = None,
+        sl: Optional[float] = None,
+        tp: Optional[float] = None,
         comment: str = "",
-    ) -> Optional[int]:
+        magic: int = 0,
+        expiration: Optional[datetime] = None,
+    ) -> dict:
         """
-        Plaats een order op het MT5 platform.
+        Plaats een handelsorder met foutafhandeling en validatie.
 
         Args:
-            action (str): "BUY" of "SELL".
             symbol (str): Handelssymbool.
-            volume (float): Order volume in lots.
-            stop_loss (float): Stop loss prijs (0 = geen stop loss).
-            take_profit (float): Take profit prijs (0 = geen take profit).
-            comment (str): Order commentaar.
+            order_type (str): Type order ('BUY', 'SELL', 'BUY_LIMIT', etc.).
+            volume (float): Volume in lots.
+            price (Optional[float]): Prijs voor limit/stop orders.
+            sl (Optional[float]): Stop Loss prijs.
+            tp (Optional[float]): Take Profit prijs.
+            comment (str): Commentaar bij de order.
+            magic (int): Magic number voor de order.
+            expiration (Optional[datetime]): Vervaldatum voor pending orders.
 
         Returns:
-            Optional[int]: Order ticket ID of None bij fout.
+            dict: Resultaat met order informatie of foutbericht.
         """
         if not self.connected:
-            self.logger.log_info("Niet verbonden met MT5", level="ERROR")
-            return None
+            error_msg = "Niet verbonden met MT5"
+            self.logger.log_info(error_msg, level="ERROR")
+            return {"success": False, "error": error_msg}
 
-        symbol_info = mt5.symbol_info(symbol)
-        if symbol_info is None:
-            self.logger.log_info(
-                f"Kon geen informatie krijgen voor symbool {symbol}", level="ERROR"
-            )
-            return None
+        # Input validatie
+        if not symbol or not isinstance(symbol, str):
+            error_msg = "Ongeldig symbool opgegeven"
+            self.logger.log_info(error_msg, level="ERROR")
+            return {"success": False, "error": error_msg}
 
-        if not symbol_info.visible or not symbol_info.trade_allowed:
-            self.logger.log_info(
-                f"Trading niet toegestaan voor {symbol}", level="ERROR"
-            )
-            return None
+        if volume <= 0:
+            error_msg = "Volume moet groter zijn dan 0"
+            self.logger.log_info(error_msg, level="ERROR")
+            return {"success": False, "error": error_msg}
 
-        tick = mt5.symbol_info_tick(symbol)
-        if tick is None:
-            self.logger.log_info(
-                f"Kon geen tick informatie ophalen voor {symbol}", level="ERROR"
-            )
-            return None
-
-        order_type = (
-            mt5.ORDER_TYPE_BUY
-            if action == "BUY"
-            else (mt5.ORDER_TYPE_SELL if action == "SELL" else None)
-        )
-        price = (
-            tick.ask if action == "BUY" else (tick.bid if action == "SELL" else None)
-        )
-        if order_type is None or price is None:
-            self.logger.log_info(f"Ongeldige actie: {action}", level="ERROR")
-            return None
-
-        request = {
-            "action": mt5.TRADE_ACTION_DEAL,
-            "symbol": symbol,
-            "volume": volume,
-            "type": order_type,
-            "price": price,
-            "sl": stop_loss if stop_loss > 0 else 0,
-            "tp": take_profit if take_profit > 0 else 0,
-            "deviation": 10,
-            "magic": 123456,
-            "comment": comment,
-            "type_time": mt5.ORDER_TIME_GTC,
-            "type_filling": mt5.ORDER_FILLING_FOK,
+        # Order type vertalen naar MT5 constanten
+        order_type_map = {
+            "BUY": mt5.ORDER_TYPE_BUY,
+            "SELL": mt5.ORDER_TYPE_SELL,
+            "BUY_LIMIT": mt5.ORDER_TYPE_BUY_LIMIT,
+            "SELL_LIMIT": mt5.ORDER_TYPE_SELL_LIMIT,
+            "BUY_STOP": mt5.ORDER_TYPE_BUY_STOP,
+            "SELL_STOP": mt5.ORDER_TYPE_SELL_STOP,
         }
 
-        self.logger.log_info(
-            f"Order versturen: {action} {volume} {symbol} @ {price}, SL: {stop_loss}, TP: {take_profit}"
-        )
-        result = mt5.order_send(request)
+        mt5_order_type = order_type_map.get(order_type.upper())
+        if mt5_order_type is None:
+            error_msg = f"Ongeldig order type: {order_type}"
+            self.logger.log_info(error_msg, level="ERROR")
+            return {"success": False, "error": error_msg}
 
-        if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
-            error_code = mt5.last_error()
-            self.logger.log_info(
-                f"Order verzenden mislukt. Error code: {error_code}", level="ERROR"
+        # Minimaal handelslot controleren
+        symbol_info = mt5.symbol_info(symbol)
+        if symbol_info is None:
+            error_msg = f"Symbool {symbol} niet gevonden"
+            self.logger.log_info(error_msg, level="ERROR")
+            return {"success": False, "error": error_msg}
+
+        min_lot = symbol_info.volume_min
+        if volume < min_lot:
+            error_msg = (
+                f"Volume {volume} is lager dan minimaal toegestane volume {min_lot}"
             )
-            return None
+            self.logger.log_info(error_msg, level="ERROR")
+            return {"success": False, "error": error_msg}
 
-        self.logger.log_info(f"Order succesvol geplaatst. Ticket: {result.order}")
-        return int(result.order)  # Zorgt voor correcte return type
+        # Order request aanmaken
+        request = {
+            "action": (
+                mt5.TRADE_ACTION_DEAL
+                if mt5_order_type in (mt5.ORDER_TYPE_BUY, mt5.ORDER_TYPE_SELL)
+                else mt5.TRADE_ACTION_PENDING
+            ),
+            "symbol": symbol,
+            "volume": volume,
+            "type": mt5_order_type,
+            "comment": comment,
+            "magic": magic,
+            "type_time": mt5.ORDER_TIME_GTC,  # Good Till Cancelled
+        }
+
+        # Voorwaardelijke velden toevoegen
+        if price is not None and mt5_order_type not in (
+            mt5.ORDER_TYPE_BUY,
+            mt5.ORDER_TYPE_SELL,
+        ):
+            request["price"] = price
+
+        if sl is not None:
+            request["sl"] = sl
+
+        if tp is not None:
+            request["tp"] = tp
+
+        if expiration is not None and mt5_order_type not in (
+            mt5.ORDER_TYPE_BUY,
+            mt5.ORDER_TYPE_SELL,
+        ):
+            request["type_time"] = mt5.ORDER_TIME_SPECIFIED
+            request["expiration"] = expiration
+
+        # Voor market orders, huidige prijs invullen
+        if mt5_order_type == mt5.ORDER_TYPE_BUY:
+            request["price"] = symbol_info.ask
+        elif mt5_order_type == mt5.ORDER_TYPE_SELL:
+            request["price"] = symbol_info.bid
+
+        # Order verzenden met retries
+        retries = 3
+        for attempt in range(retries):
+            try:
+                self.logger.log_info(f"Order verzenden: {request}")
+                result = mt5.order_send(request)
+
+                if result.retcode == mt5.TRADE_RETCODE_DONE:
+                    success_msg = f"Order succesvol geplaatst: Ticket #{result.order}"
+                    self.logger.log_info(success_msg)
+                    return {
+                        "success": True,
+                        "order_id": result.order,
+                        "message": success_msg,
+                        "request": request,
+                        "result": {
+                            "retcode": result.retcode,
+                            "volume": result.volume,
+                            "price": result.price,
+                            "comment": result.comment,
+                        },
+                    }
+                else:
+                    error_msg = f"Order fout: {result.retcode}, {result.comment}"
+                    self.logger.log_info(error_msg, level="ERROR")
+
+                    # Specifieke fouten afhandelen
+                    if result.retcode == mt5.TRADE_RETCODE_REQUOTE:
+                        # Bij requote, probeer met nieuwe prijs
+                        if mt5_order_type == mt5.ORDER_TYPE_BUY:
+                            request["price"] = mt5.symbol_info_tick(symbol).ask
+                        elif mt5_order_type == mt5.ORDER_TYPE_SELL:
+                            request["price"] = mt5.symbol_info_tick(symbol).bid
+                    elif result.retcode == mt5.TRADE_RETCODE_INVALID_VOLUME:
+                        # Volume aanpassen naar toegestaan volume
+                        request["volume"] = min_lot
+            except Exception as e:
+                error_msg = f"Uitzondering bij order verzenden: {str(e)}"
+                self.logger.log_info(error_msg, level="ERROR")
+
+            # Wacht voor volgende poging
+            if attempt < retries - 1:
+                self.logger.log_info(
+                    f"Poging {attempt + 1} mislukt, opnieuw proberen..."
+                )
+                time.sleep(1)
+
+        final_error = f"Order plaatsen mislukt na {retries} pogingen"
+        self.logger.log_info(final_error, level="ERROR")
+        return {"success": False, "error": final_error, "request": request}

@@ -12,25 +12,20 @@ data opgedeeld in opeenvolgende 'in-sample' (IS) en 'out-of-sample' (OOS) period
 Dit zorgt voor een robuustere set van parameters die beter generaliseert naar nieuwe data.
 """
 
-import json
-import logging
-import os
-from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional, Tuple, Union
 import concurrent.futures
 import itertools
+import json
+import os
+from datetime import datetime, timedelta
+from typing import Dict, List, Any, Optional, Union
 
-import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
-from matplotlib.gridspec import GridSpec
 import seaborn as sns
+from matplotlib.gridspec import GridSpec
+from src.analysis.advanced_backtester import Backtester
 
 from src.utils.config import load_config
 from src.utils.logger import Logger
-from src.strategy.strategy_factory import StrategyFactory
-from src.risk.risk_manager import RiskManager
-from src.analysis.advanced_backtester import Backtester
 
 try:
     from src.ftmo.validator import FTMOValidator
@@ -64,14 +59,13 @@ class WalkForwardOptimizer:
 
         # Stel output directory in
         self.output_dir = os.path.join(
-            self.config.get("output", {}).get("data_dir", "data"),
-            "walk_forward"
+            self.config.get("output", {}).get("data_dir", "data"), "walk_forward"
         )
         os.makedirs(self.output_dir, exist_ok=True)
 
         # Setup plotting stijl
-        plt.style.use('ggplot')
-        plt.rcParams['figure.figsize'] = (16, 10)
+        plt.style.use("ggplot")
+        plt.rcParams["figure.figsize"] = (16, 10)
         sns.set_style("whitegrid")
 
         # Maak backtester voor optimalisatie en backtests
@@ -91,7 +85,7 @@ class WalkForwardOptimizer:
         end_date: datetime,
         window_size_days: int,
         oos_size_days: int,
-        step_size_days: int
+        step_size_days: int,
     ) -> List[Dict[str, datetime]]:
         """
         Genereer windows voor walk-forward analyse.
@@ -115,7 +109,7 @@ class WalkForwardOptimizer:
         if total_period < window_size_days + oos_size_days:
             self.logger.log_info(
                 f"Te korte periode ({total_period} dagen) voor window size ({window_size_days}) + OOS ({oos_size_days})",
-                level="ERROR"
+                level="ERROR",
             )
             return []
 
@@ -135,13 +129,15 @@ class WalkForwardOptimizer:
             if oos_end > end_date:
                 break
 
-            windows.append({
-                "window": window_idx,
-                "is_start": is_start,
-                "is_end": is_end,
-                "oos_start": oos_start,
-                "oos_end": oos_end
-            })
+            windows.append(
+                {
+                    "window": window_idx,
+                    "is_start": is_start,
+                    "is_end": is_end,
+                    "oos_start": oos_start,
+                    "oos_end": oos_end,
+                }
+            )
 
             # Update voor volgende window
             is_start = is_start + timedelta(days=step_size_days)
@@ -159,7 +155,7 @@ class WalkForwardOptimizer:
         end_date: datetime,
         metric: str,
         min_trades: int,
-        max_threads: int
+        max_threads: int,
     ) -> Dict[str, Any]:
         """
         Optimaliseer strategie parameters op een bepaalde periode.
@@ -179,7 +175,8 @@ class WalkForwardOptimizer:
             Dictionary met optimalisatieresultaten
         """
         self.logger.log_info(
-            f"Optimaliseren parameters voor {start_date.strftime('%Y-%m-%d')} tot {end_date.strftime('%Y-%m-%d')}")
+            f"Optimaliseren parameters voor {start_date.strftime('%Y-%m-%d')} tot {end_date.strftime('%Y-%m-%d')}"
+        )
 
         # Genereer alle mogelijke parametercombinaties
         param_keys = list(param_ranges.keys())
@@ -187,7 +184,8 @@ class WalkForwardOptimizer:
         param_combinations = list(itertools.product(*param_values))
 
         self.logger.log_info(
-            f"Evalueren van {len(param_combinations)} parametercombinaties")
+            f"Evalueren van {len(param_combinations)} parametercombinaties"
+        )
 
         # Evalueer alle combinaties (parallel indien mogelijk)
         results = []
@@ -195,7 +193,8 @@ class WalkForwardOptimizer:
         if max_threads > 1:
             # Parallelle uitvoering
             with concurrent.futures.ThreadPoolExecutor(
-                max_workers=max_threads) as executor:
+                max_workers=max_threads
+            ) as executor:
                 futures = []
 
                 for params in param_combinations:
@@ -210,7 +209,7 @@ class WalkForwardOptimizer:
                             start_date,
                             end_date,
                             metric,
-                            min_trades
+                            min_trades,
                         )
                     )
 
@@ -220,8 +219,9 @@ class WalkForwardOptimizer:
                         if result["valid"]:
                             results.append(result)
                     except Exception as e:
-                        self.logger.log_info(f"Fout bij parameter evaluatie: {e}",
-                                             level="ERROR")
+                        self.logger.log_info(
+                            f"Fout bij parameter evaluatie: {e}", level="ERROR"
+                        )
         else:
             # Sequentiële uitvoering
             for params in param_combinations:
@@ -234,7 +234,7 @@ class WalkForwardOptimizer:
                     start_date,
                     end_date,
                     metric,
-                    min_trades
+                    min_trades,
                 )
                 if result["valid"]:
                     results.append(result)
@@ -248,12 +248,12 @@ class WalkForwardOptimizer:
                 "success": True,
                 "best_params": best_result["parameters"],
                 "metrics": best_result["metrics"],
-                "all_results": results
+                "all_results": results,
             }
         else:
             return {
                 "success": False,
-                "error": "Geen valide parametercombinaties gevonden"
+                "error": "Geen valide parametercombinaties gevonden",
             }
 
     def _evaluate_parameters(
@@ -265,7 +265,7 @@ class WalkForwardOptimizer:
         start_date: datetime,
         end_date: datetime,
         metric: str,
-        min_trades: int
+        min_trades: int,
     ) -> Dict[str, Any]:
         """
         Evalueer één set parameters met een backtest.
@@ -291,14 +291,14 @@ class WalkForwardOptimizer:
             parameters=parameters,
             start_date=start_date,
             end_date=end_date,
-            metric=metric
+            metric=metric,
         )
 
         if not backtest_result["success"]:
             return {
                 "valid": False,
                 "parameters": parameters,
-                "error": backtest_result.get("error", "Backtest mislukt")
+                "error": backtest_result.get("error", "Backtest mislukt"),
             }
 
         metrics = backtest_result["metrics"]
@@ -310,14 +310,14 @@ class WalkForwardOptimizer:
                 "valid": False,
                 "parameters": parameters,
                 "metrics": metrics,
-                "error": f"Te weinig trades: {len(trades)} (minimum: {min_trades})"
+                "error": f"Te weinig trades: {len(trades)} (minimum: {min_trades})",
             }
 
         return {
             "valid": True,
             "parameters": parameters,
             "metrics": metrics,
-            "num_trades": len(trades)
+            "num_trades": len(trades),
         }
 
     def _backtest_parameters(
@@ -328,7 +328,7 @@ class WalkForwardOptimizer:
         parameters: Dict[str, Any],
         start_date: datetime,
         end_date: datetime,
-        metric: str
+        metric: str,
     ) -> Dict[str, Any]:
         """
         Voer een backtest uit met specifieke parameters.
@@ -379,7 +379,7 @@ class WalkForwardOptimizer:
                 parameters=parameters,
                 timeframe=timeframe,
                 start_date=start_str,
-                end_date=end_str
+                end_date=end_str,
             )
 
             return result
@@ -388,9 +388,7 @@ class WalkForwardOptimizer:
             return {"success": False, "error": str(e)}
 
     def _find_robust_parameters(
-        self,
-        window_results: List[Dict[str, Any]],
-        param_ranges: Dict[str, List[Any]]
+        self, window_results: List[Dict[str, Any]], param_ranges: Dict[str, List[Any]]
     ) -> Dict[str, Any]:
         """
         Bepaal robuuste parameters op basis van window resultaten.
@@ -408,7 +406,8 @@ class WalkForwardOptimizer:
         if not successful_windows:
             self.logger.log_info(
                 "Geen succesvolle windows om robuuste parameters uit te bepalen",
-                level="ERROR")
+                level="ERROR",
+            )
             # Gebruik gemiddelde waarden als fallback
             return {k: self._get_parameter_average(v) for k, v in param_ranges.items()}
 
@@ -440,6 +439,7 @@ class WalkForwardOptimizer:
             # Voor categorische parameters nemen we meest voorkomende waarde
             else:
                 from collections import Counter
+
                 counter = Counter(values)
                 robust_params[key] = counter.most_common(1)[0][0]
 
@@ -466,7 +466,7 @@ class WalkForwardOptimizer:
         window_results: List[Dict[str, Any]],
         robust_params: Dict[str, Any],
         full_results: Dict[str, Any],
-        metric: str
+        metric: str,
     ) -> str:
         """
         Visualiseer de resultaten van walk-forward optimalisatie.
@@ -484,8 +484,9 @@ class WalkForwardOptimizer:
         successful_windows = [w for w in window_results if w.get("success", False)]
 
         if not successful_windows:
-            self.logger.log_info("Geen succesvolle windows om te visualiseren",
-                                 level="WARNING")
+            self.logger.log_info(
+                "Geen succesvolle windows om te visualiseren", level="WARNING"
+            )
             return ""
 
         # Creëer figuur met subplots
@@ -507,8 +508,12 @@ class WalkForwardOptimizer:
         # Reference line for full period
         if full_results.get("success", False):
             full_metric = full_results.get("metrics", {}).get(metric, 0)
-            ax1.axhline(y=full_metric, color="green", linestyle="--",
-                        label=f"Volledige periode: {full_metric:.4f}")
+            ax1.axhline(
+                y=full_metric,
+                color="green",
+                linestyle="--",
+                label=f"Volledige periode: {full_metric:.4f}",
+            )
 
         ax1.set_title(f"{metric} per Window (In-Sample vs Out-of-Sample)", fontsize=16)
         ax1.set_xlabel("Window", fontsize=14)
@@ -519,10 +524,12 @@ class WalkForwardOptimizer:
         # 2. Plot total returns
         ax2 = fig.add_subplot(gs[1, :])
 
-        is_returns = [w["is_metrics"].get("total_return", 0) for w in
-                      successful_windows]
-        oos_returns = [w["oos_metrics"].get("total_return", 0) for w in
-                       successful_windows]
+        is_returns = [
+            w["is_metrics"].get("total_return", 0) for w in successful_windows
+        ]
+        oos_returns = [
+            w["oos_metrics"].get("total_return", 0) for w in successful_windows
+        ]
 
         ax2.plot(windows, is_returns, "g-o", label="In-Sample Rendement (%)")
         ax2.plot(windows, oos_returns, "m-o", label="Out-of-Sample Rendement (%)")
@@ -530,8 +537,12 @@ class WalkForwardOptimizer:
         # Reference line for full period
         if full_results.get("success", False):
             full_return = full_results.get("metrics", {}).get("total_return", 0)
-            ax2.axhline(y=full_return, color="green", linestyle="--",
-                        label=f"Volledige periode: {full_return:.2f}%")
+            ax2.axhline(
+                y=full_return,
+                color="green",
+                linestyle="--",
+                label=f"Volledige periode: {full_return:.2f}%",
+            )
 
         ax2.set_title("Rendement per Window (%)", fontsize=16)
         ax2.set_xlabel("Window", fontsize=14)
@@ -557,8 +568,9 @@ class WalkForwardOptimizer:
                 min_val = min(values)
                 max_val = max(values)
                 if max_val > min_val:
-                    normalized_values[param] = [(v - min_val) / (max_val - min_val) for
-                                                v in values]
+                    normalized_values[param] = [
+                        (v - min_val) / (max_val - min_val) for v in values
+                    ]
                 else:
                     normalized_values[param] = [0.5 for _ in values]
 
@@ -597,7 +609,7 @@ class WalkForwardOptimizer:
             cellText=table_data,
             loc="center",
             cellLoc="center",
-            colWidths=[0.4, 0.3, 0.3]
+            colWidths=[0.4, 0.3, 0.3],
         )
         table.auto_set_font_size(False)
         table.set_fontsize(12)
@@ -637,7 +649,7 @@ class WalkForwardOptimizer:
         metric: str = "sharpe_ratio",
         min_trades: int = 10,
         max_optimization_threads: int = 1,
-        visualize: bool = True
+        visualize: bool = True,
     ) -> Dict[str, Any]:
         """
         Voer een complete walk-forward optimalisatie analyse uit.
@@ -668,19 +680,23 @@ class WalkForwardOptimizer:
 
         self.logger.log_info(f"Starting Walk-Forward Analysis voor {strategy_name}")
         self.logger.log_info(
-            f"Periode: {start_date.strftime('%Y-%m-%d')} tot {end_date.strftime('%Y-%m-%d')}")
+            f"Periode: {start_date.strftime('%Y-%m-%d')} tot {end_date.strftime('%Y-%m-%d')}"
+        )
         self.logger.log_info(
-            f"Window: {window_size_days} dagen, OOS: {oos_size_days} dagen, Stap: {step_size_days} dagen")
+            f"Window: {window_size_days} dagen, OOS: {oos_size_days} dagen, Stap: {step_size_days} dagen"
+        )
         self.logger.log_info(f"Parameters: {param_ranges}")
 
         # Genereer alle window periodes
-        windows = self._generate_windows(start_date, end_date, window_size_days,
-                                         oos_size_days, step_size_days)
+        windows = self._generate_windows(
+            start_date, end_date, window_size_days, oos_size_days, step_size_days
+        )
 
         if not windows:
             self.logger.log_info(
                 "Geen valide windows gegenereerd. Controleer datumrange en windowgroottes.",
-                level="ERROR")
+                level="ERROR",
+            )
             return {"success": False, "error": "Geen valide windows"}
 
         self.logger.log_info(f"Gegenereerd {len(windows)} analyze windows")
@@ -689,9 +705,11 @@ class WalkForwardOptimizer:
         window_results = []
 
         for i, window in enumerate(windows):
-            self.logger.log_info(f"Verwerken window {i + 1}/{len(windows)}: "
-                                 f"IS {window['is_start'].strftime('%Y-%m-%d')} - {window['is_end'].strftime('%Y-%m-%d')}, "
-                                 f"OOS {window['oos_start'].strftime('%Y-%m-%d')} - {window['oos_end'].strftime('%Y-%m-%d')}")
+            self.logger.log_info(
+                f"Verwerken window {i + 1}/{len(windows)}: "
+                f"IS {window['is_start'].strftime('%Y-%m-%d')} - {window['is_end'].strftime('%Y-%m-%d')}, "
+                f"OOS {window['oos_start'].strftime('%Y-%m-%d')} - {window['oos_end'].strftime('%Y-%m-%d')}"
+            )
 
             # 1. Optimaliseer parameters op in-sample data
             is_results = self._optimize_parameters(
@@ -699,25 +717,28 @@ class WalkForwardOptimizer:
                 symbols=symbols,
                 timeframe=timeframe,
                 param_ranges=param_ranges,
-                start_date=window['is_start'],
-                end_date=window['is_end'],
+                start_date=window["is_start"],
+                end_date=window["is_end"],
                 metric=metric,
                 min_trades=min_trades,
-                max_threads=max_optimization_threads
+                max_threads=max_optimization_threads,
             )
 
             if not is_results["success"]:
-                self.logger.log_info(f"Optimalisatie mislukt voor window {i + 1}",
-                                     level="WARNING")
-                window_results.append({
-                    "window": i + 1,
-                    "is_start": window['is_start'],
-                    "is_end": window['is_end'],
-                    "oos_start": window['oos_start'],
-                    "oos_end": window['oos_end'],
-                    "success": False,
-                    "error": is_results.get("error", "Onbekende fout")
-                })
+                self.logger.log_info(
+                    f"Optimalisatie mislukt voor window {i + 1}", level="WARNING"
+                )
+                window_results.append(
+                    {
+                        "window": i + 1,
+                        "is_start": window["is_start"],
+                        "is_end": window["is_end"],
+                        "oos_start": window["oos_start"],
+                        "oos_end": window["oos_end"],
+                        "success": False,
+                        "error": is_results.get("error", "Onbekende fout"),
+                    }
+                )
                 continue
 
             best_params = is_results["best_params"]
@@ -732,52 +753,61 @@ class WalkForwardOptimizer:
                 symbols=symbols,
                 timeframe=timeframe,
                 parameters=best_params,
-                start_date=window['oos_start'],
-                end_date=window['oos_end'],
-                metric=metric
+                start_date=window["oos_start"],
+                end_date=window["oos_end"],
+                metric=metric,
             )
 
             if not oos_results["success"]:
-                self.logger.log_info(f"OOS validatie mislukt voor window {i + 1}",
-                                     level="WARNING")
-                window_results.append({
-                    "window": i + 1,
-                    "is_start": window['is_start'],
-                    "is_end": window['is_end'],
-                    "oos_start": window['oos_start'],
-                    "oos_end": window['oos_end'],
-                    "parameters": best_params,
-                    "is_metrics": is_metrics,
-                    "success": False,
-                    "error": oos_results.get("error",
-                                             "Onbekende fout bij OOS validatie")
-                })
+                self.logger.log_info(
+                    f"OOS validatie mislukt voor window {i + 1}", level="WARNING"
+                )
+                window_results.append(
+                    {
+                        "window": i + 1,
+                        "is_start": window["is_start"],
+                        "is_end": window["is_end"],
+                        "oos_start": window["oos_start"],
+                        "oos_end": window["oos_end"],
+                        "parameters": best_params,
+                        "is_metrics": is_metrics,
+                        "success": False,
+                        "error": oos_results.get(
+                            "error", "Onbekende fout bij OOS validatie"
+                        ),
+                    }
+                )
                 continue
 
             oos_metrics = oos_results["metrics"]
 
             self.logger.log_info(f"OOS {metric}: {oos_metrics.get(metric, 0):.4f}")
             self.logger.log_info(
-                f"OOS rendement: {oos_metrics.get('total_return', 0):.2f}%")
+                f"OOS rendement: {oos_metrics.get('total_return', 0):.2f}%"
+            )
 
             # Volledig resultaat opslaan
-            window_results.append({
-                "window": i + 1,
-                "is_start": window['is_start'],
-                "is_end": window['is_end'],
-                "oos_start": window['oos_start'],
-                "oos_end": window['oos_end'],
-                "parameters": best_params,
-                "is_metrics": is_metrics,
-                "oos_metrics": oos_metrics,
-                "success": True
-            })
+            window_results.append(
+                {
+                    "window": i + 1,
+                    "is_start": window["is_start"],
+                    "is_end": window["is_end"],
+                    "oos_start": window["oos_start"],
+                    "oos_end": window["oos_end"],
+                    "parameters": best_params,
+                    "is_metrics": is_metrics,
+                    "oos_metrics": oos_metrics,
+                    "success": True,
+                }
+            )
 
         # Analyseer resultaten om robuuste parameters te vinden
         if not any(r.get("success", False) for r in window_results):
             self.logger.log_info("Geen succesvol window gevonden", level="ERROR")
-            return {"success": False,
-                    "error": "Geen enkel window succesvol geoptimaliseerd"}
+            return {
+                "success": False,
+                "error": "Geen enkel window succesvol geoptimaliseerd",
+            }
 
         robust_params = self._find_robust_parameters(window_results, param_ranges)
         self.logger.log_info(f"Robuuste parameters gevonden: {robust_params}")
@@ -790,7 +820,7 @@ class WalkForwardOptimizer:
             parameters=robust_params,
             start_date=start_date,
             end_date=end_date,
-            metric=metric
+            metric=metric,
         )
 
         # Genereer visualisaties indien gewenst
@@ -799,7 +829,7 @@ class WalkForwardOptimizer:
                 window_results=window_results,
                 robust_params=robust_params,
                 full_results=full_results,
-                metric=metric
+                metric=metric,
             )
             self.logger.log_info(f"Resultaten gevisualiseerd in {plot_path}")
 
@@ -810,29 +840,33 @@ class WalkForwardOptimizer:
             "symbols": symbols,
             "timeframe": timeframe,
             "period": {
-                "start": start_date.strftime('%Y-%m-%d'),
-                "end": end_date.strftime('%Y-%m-%d')
+                "start": start_date.strftime("%Y-%m-%d"),
+                "end": end_date.strftime("%Y-%m-%d"),
             },
             "windows": [
-                {k: (v.strftime('%Y-%m-%d') if isinstance(v, datetime) else v)
-                 for k, v in r.items()}
+                {
+                    k: (v.strftime("%Y-%m-%d") if isinstance(v, datetime) else v)
+                    for k, v in r.items()
+                }
                 for r in window_results
             ],
             "robust_parameters": robust_params,
             "full_period_metrics": full_results.get("metrics", {}),
             "optimization_metric": metric,
-            "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         }
 
         # Sla resultaten op
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_file = os.path.join(self.output_dir,
-                                   f"wfo_{strategy_name}_{timestamp}.json")
+        output_file = os.path.join(
+            self.output_dir, f"wfo_{strategy_name}_{timestamp}.json"
+        )
 
         with open(output_file, "w") as f:
             json.dump(output_data, f, indent=4, default=str)
 
         self.logger.log_info(
-            f"Walk-Forward Analyse resultaten opgeslagen in {output_file}")
+            f"Walk-Forward Analyse resultaten opgeslagen in {output_file}"
+        )
 
         return output_data

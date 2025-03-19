@@ -2,7 +2,7 @@ import json
 import os
 import sys
 
-from src.ftmo.ftmo_helper import FTMOHelper
+from src.ftmo.validator import FTMOValidator  # Vervang FTMOHelper door FTMOValidator
 
 
 def load_config(config_path):
@@ -44,17 +44,17 @@ def main():
 
     print(f"\nAnalyseren van trading data met initiële balans: ${initial_balance:,.2f}")
 
-    # Initialiseer FTMO helper
-    ftmo_helper = FTMOHelper(log_file)
+    # Initialiseer FTMO validator in plaats van helper
+    validator.py = FTMOValidator(log_file, initial_balance=initial_balance)
 
     # Genereer rapport
     print("\nGenereren van gedetailleerd FTMO compliance rapport...")
-    ftmo_helper.generate_trading_report(initial_balance)
+    validator.py.generate_trading_report()  # initial_balance hoeft hier niet meer als parameter
 
     print("\nWil je nog meer details zien? (j/n): ", end="")
     if input().lower() == "j":
-        # Voer meer gedetailleerde analyse uit
-        compliance = ftmo_helper.check_ftmo_compliance(initial_balance)
+        # Voer gedetailleerde analyse uit met de validator
+        compliance = validator.py.check_ftmo_compliance()  # initial_balance hoeft niet meer als parameter
 
         if compliance["details"]:
             details = compliance["details"]

@@ -153,7 +153,7 @@ class DAXOpeningStrategy(Strategy):
         initial_range = today_data[
             (today_data.index >= session_open_time)
             & (today_data.index <= range_close_time)
-        ]
+            ]
 
         # If we have enough data in the initial range, calculate high and low
         has_session_range = False

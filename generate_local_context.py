@@ -9,11 +9,10 @@ Geoptimaliseerd voor beperkte uitvoergrootte
 
 import datetime
 import glob
+# Configuratie
 import os
 import re
 
-# Configuratie
-import os
 USER_HOME = os.path.expanduser("~")
 LOCAL_DIR = os.path.join(USER_HOME, "PycharmProjects", "Sophy")
 REPO_NAME = "Sophy"
@@ -41,7 +40,8 @@ def init_output_file():
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
         f.write(f"# {REPO_NAME} Project Documentatie\n")
         f.write(
-            f"Gegenereerd op: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+            f"Gegenereerd op: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+        )
 
 
 def write_to_file(content):
@@ -63,7 +63,9 @@ def count_files(directory_path, pattern="*.py", exclude="__init__.py"):
 def generate_architecture():
     """Genereer architectuurdocumentatie"""
     content = "# Sophy Trading Framework Architectuur\n"
-    content += f"Gegenereerd op: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+    content += (
+        f"Gegenereerd op: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+    )
 
     # Modules detecteren
     content += "## Kernmodules\n\n"
@@ -74,17 +76,26 @@ def generate_architecture():
         {"path": "src/connector", "name": "Connector", "desc": "MT5 marktverbinding"},
         {"path": "src/strategy", "name": "Strategy", "desc": "Trading strategieën"},
         {"path": "src/risk", "name": "Risk", "desc": "Risicomanagement"},
-        {"path": "src/analysis", "name": "Analysis",
-         "desc": "Backtesting & optimalisatie"},
+        {
+            "path": "src/analysis",
+            "name": "Analysis",
+            "desc": "Backtesting & optimalisatie",
+        },
         {"path": "src/ftmo", "name": "FTMO", "desc": "FTMO compliance"},
         {"path": "src/utils", "name": "Utils", "desc": "Hulpfuncties & tools"},
-        {"path": "src/presentation", "name": "Presentation",
-         "desc": "Visualisatie & dashboards"}]
+        {
+            "path": "src/presentation",
+            "name": "Presentation",
+            "desc": "Visualisatie & dashboards",
+        },
+    ]
 
     for module in modules:
         if os.path.exists(module["path"]):
             count = count_files(module["path"])
-            content += f"| **{module['name']}** | {module['desc']} | {count} componenten |\n"
+            content += (
+                f"| **{module['name']}** | {module['desc']} | {count} componenten |\n"
+            )
 
     content += "\n"
 
@@ -106,8 +117,11 @@ def generate_architecture():
 
         for file in glob.glob("src/strategy/*.py"):
             base_name = os.path.basename(file)
-            if base_name not in ["__init__.py", "base_strategy.py",
-                                 "strategy_factory.py"]:
+            if base_name not in [
+                "__init__.py",
+                "base_strategy.py",
+                "strategy_factory.py",
+            ]:
                 strategy_name = os.path.splitext(base_name)[0]
                 content += f"    BaseStrategy --> {strategy_name}\n"
 
@@ -122,8 +136,11 @@ def generate_architecture():
         content += "    Analysis --> Optimizer[Optimizer]\n"
 
         if os.path.exists("src/analysis/backtrader_adapter.py") or os.path.exists(
-            "src/analysis/backtrader_integration.py"):
-            content += "    Analysis --> BacktraderIntegration[Backtrader Integration]\n"
+            "src/analysis/backtrader_integration.py"
+        ):
+            content += (
+                "    Analysis --> BacktraderIntegration[Backtrader Integration]\n"
+            )
 
     content += "```\n\n"
 
@@ -156,13 +173,15 @@ def generate_toc():
     """Genereer inhoudsopgave"""
     content = "# Inhoudsopgave\n\n"
 
-    categories = [{"name": "Kernmodules", "pattern": r"src/(connector|strategy|risk)"},
+    categories = [
+        {"name": "Kernmodules", "pattern": r"src/(connector|strategy|risk)"},
         {"name": "Analyse", "pattern": r"src/analysis"},
         {"name": "FTMO", "pattern": r"src/ftmo"},
         {"name": "Utils", "pattern": r"src/utils"},
         {"name": "Configuratie", "pattern": r"config"},
         {"name": "Tests", "pattern": r"tests"},
-        {"name": "Documentatie", "pattern": r"docs"}]
+        {"name": "Documentatie", "pattern": r"docs"},
+    ]
 
     for category in categories:
         content += f"## {category['name']}\n\n"
@@ -191,8 +210,10 @@ def generate_toc():
 def process_file(file_path, category="Overig"):
     """Verwerk een bestand en voeg het toe aan de documentatie"""
     # Skip te grote of irrelevante bestanden
-    if any(x in file_path for x in
-           ["__pycache__", "egg-info", ".git", ".idea", "local_context.txt"]):
+    if any(
+        x in file_path
+        for x in ["__pycache__", "egg-info", ".git", ".idea", "local_context.txt"]
+    ):
         return
 
     file_size = os.path.getsize(file_path)
@@ -213,9 +234,17 @@ def process_file(file_path, category="Overig"):
     # Bepaal bestandsextensie en taal
     extension = os.path.splitext(file_path)[1][1:].lower()
 
-    language_map = {"toml": "toml", "md": "markdown", "r": "r", "rmd": "r",
-        "py": "python", "json": "json", "yml": "yaml", "yaml": "yaml",
-        "txt": "plaintext"}
+    language_map = {
+        "toml": "toml",
+        "md": "markdown",
+        "r": "r",
+        "rmd": "r",
+        "py": "python",
+        "json": "json",
+        "yml": "yaml",
+        "yaml": "yaml",
+        "txt": "plaintext",
+    }
 
     language = language_map.get(extension, "plaintext")
 
@@ -242,11 +271,18 @@ def process_categories():
     content = "# Bestandsinhoud\n\n"
     write_to_file(content)
 
-    file_categories = {"src/connector": "Market Connectivity",
-        "src/strategy": "Trading Strategy", "src/risk": "Risk Management",
-        "src/analysis": "Analysis & Backtesting", "src/ftmo": "FTMO Compliance",
-        "src/utils": "Utilities", "src/presentation": "Visualization",
-        "config": "Configuration", "tests": "Testing", "docs": "Documentation"}
+    file_categories = {
+        "src/connector": "Market Connectivity",
+        "src/strategy": "Trading Strategy",
+        "src/risk": "Risk Management",
+        "src/analysis": "Analysis & Backtesting",
+        "src/ftmo": "FTMO Compliance",
+        "src/utils": "Utilities",
+        "src/presentation": "Visualization",
+        "config": "Configuration",
+        "tests": "Testing",
+        "docs": "Documentation",
+    }
 
     for prefix, category in file_categories.items():
         if os.path.exists(prefix):
@@ -262,8 +298,13 @@ def process_categories():
     content = "## Overige Bestanden\n\n"
     write_to_file(content)
 
-    key_files = ["setup.py", "requirements.txt", "run.py", "verify_sophy.py",
-                 ".gitignore"]
+    key_files = [
+        "setup.py",
+        "requirements.txt",
+        "run.py",
+        "verify_sophy.py",
+        ".gitignore",
+    ]
     for file in key_files:
         if os.path.exists(file):
             process_file(file, "Systeembestanden")

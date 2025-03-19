@@ -24,7 +24,8 @@ class BacktraderAdapter:
 
         # Default settings
         self.cerebro.broker.set_cash(
-            config.get("risk", {}).get("initial_balance", 100000))
+            config.get("risk", {}).get("initial_balance", 100000)
+        )
         self.cerebro.broker.setcommission(commission=0.0001)  # 0.01% commission
 
         # Performance analyzers
@@ -65,7 +66,7 @@ class BacktraderAdapter:
                 low="low",
                 close="close",
                 volume="volume",
-                openinterest=-1
+                openinterest=-1,
             )
         else:
             # If the index is not datetime, assume there's a 'date' column
@@ -81,11 +82,12 @@ class BacktraderAdapter:
                     low="low",
                     close="close",
                     volume="volume",
-                    openinterest=-1
+                    openinterest=-1,
                 )
             else:
                 self.logger.log_info(
-                    f"Cannot add data for {symbol}: no datetime index or 'date' column")
+                    f"Cannot add data for {symbol}: no datetime index or 'date' column"
+                )
                 return
 
         # Add the data feed to Cerebro
@@ -109,8 +111,9 @@ class BacktraderAdapter:
         from src.analysis.strategy_adapter import SophyStrategyAdapter
 
         # Add the strategy adapter with the Sophy strategy
-        self.cerebro.addstrategy(SophyStrategyAdapter, sophy_strategy=sophy_strategy,
-                                 **kwargs)
+        self.cerebro.addstrategy(
+            SophyStrategyAdapter, sophy_strategy=sophy_strategy, **kwargs
+        )
 
         self.logger.log_info(f"Starting backtest with {sophy_strategy.get_name()}")
 
@@ -138,9 +141,12 @@ class BacktraderAdapter:
             "success": True,
             "initial_balance": self.cerebro.broker.startingcash,
             "final_balance": self.cerebro.broker.getvalue(),
-            "profit_loss": self.cerebro.broker.getvalue() - self.cerebro.broker.startingcash,
+            "profit_loss": self.cerebro.broker.getvalue()
+                           - self.cerebro.broker.startingcash,
             "profit_percentage": (
-                                         self.cerebro.broker.getvalue() / self.cerebro.broker.startingcash - 1) * 100,
+                                     self.cerebro.broker.getvalue() / self.cerebro.broker.startingcash - 1
+                                 )
+                                 * 100,
             "total_trades": total_trades,
             "won_trades": won_trades,
             "lost_trades": lost_trades,
@@ -158,7 +164,8 @@ class BacktraderAdapter:
         self.logger.log_info(
             f"Backtest completed: Profit: {backtest_results['profit_percentage']:.2f}%, "
             f"Win Rate: {backtest_results['win_rate']:.2f}%, "
-            f"FTMO Compliant: {ftmo_compliance['is_compliant']}")
+            f"FTMO Compliant: {ftmo_compliance['is_compliant']}"
+        )
 
         return backtest_results
 
@@ -173,8 +180,9 @@ class BacktraderAdapter:
             import matplotlib.pyplot as plt
 
             # Generate plots
-            figs = self.cerebro.plot(style="candle", barup="green", bardown="red",
-                                     volume=False, grid=True)
+            figs = self.cerebro.plot(
+                style="candle", barup="green", bardown="red", volume=False, grid=True
+            )
 
             if filename and figs and len(figs) > 0 and len(figs[0]) > 0:
                 plt.savefig(filename, dpi=300)
@@ -202,7 +210,7 @@ class BacktraderAdapter:
             "H4": bt.TimeFrame.Minutes,
             "D1": bt.TimeFrame.Days,
             "W1": bt.TimeFrame.Weeks,
-            "MN1": bt.TimeFrame.Months
+            "MN1": bt.TimeFrame.Months,
         }
 
         if timeframe in timeframe_map:
@@ -229,7 +237,7 @@ class BacktraderAdapter:
             "H4": 240,
             "D1": 1,
             "W1": 1,
-            "MN1": 1
+            "MN1": 1,
         }
 
         return compression_map.get(timeframe, 1)
@@ -268,7 +276,11 @@ class BacktraderAdapter:
 
         # Overall compliance
         is_compliant = (
-            profit_target_met and daily_loss_compliant and total_loss_compliant and trading_days_compliant)
+            profit_target_met
+            and daily_loss_compliant
+            and total_loss_compliant
+            and trading_days_compliant
+        )
 
         return {
             "is_compliant": is_compliant,

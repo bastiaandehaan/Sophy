@@ -22,18 +22,18 @@ class SophyBacktester:
         self.cerebro = bt.Cerebro()
 
         # Standaard instellingen
-        initial_cash = config.get('initial_balance', 100000)
+        initial_cash = config.get("initial_balance", 100000)
         self.cerebro.broker.setcash(initial_cash)
         self.cerebro.broker.setcommission(commission=0.0001)  # 0.01%
 
         # Voeg analyzers toe
-        self.cerebro.addanalyzer(bt.analyzers.SharpeRatio, _name='sharpe')
-        self.cerebro.addanalyzer(bt.analyzers.DrawDown, _name='drawdown')
-        self.cerebro.addanalyzer(bt.analyzers.TradeAnalyzer, _name='trades')
+        self.cerebro.addanalyzer(bt.analyzers.SharpeRatio, _name="sharpe")
+        self.cerebro.addanalyzer(bt.analyzers.DrawDown, _name="drawdown")
+        self.cerebro.addanalyzer(bt.analyzers.TradeAnalyzer, _name="trades")
 
         self.logger.log_info("Backtester geïnitialiseerd")
 
-    def add_data(self, df: pd.DataFrame, symbol: str, timeframe: str = 'D1') -> None:
+    def add_data(self, df: pd.DataFrame, symbol: str, timeframe: str = "D1") -> None:
         """
         Voeg data toe aan de backtest.
 
@@ -44,12 +44,13 @@ class SophyBacktester:
         """
         # Controleer en prepareer DataFrame
         if not isinstance(df.index, pd.DatetimeIndex):
-            if 'date' in df.columns:
-                df = df.set_index('date')
+            if "date" in df.columns:
+                df = df.set_index("date")
             else:
                 self.logger.log_info(
                     f"DataFrame voor {symbol} heeft geen datetime index",
-                    level="WARNING")
+                    level="WARNING",
+                )
                 return
 
         # Maak een datafeed
@@ -57,20 +58,21 @@ class SophyBacktester:
             dataname=df,
             name=symbol,
             datetime=None,  # Gebruik index
-            open='open',
-            high='high',
-            low='low',
-            close='close',
-            volume='volume',
-            openinterest=-1
+            open="open",
+            high="high",
+            low="low",
+            close="close",
+            volume="volume",
+            openinterest=-1,
         )
 
         # Voeg toe aan cerebro
         self.cerebro.adddata(data)
         self.logger.log_info(f"Data toegevoegd voor {symbol} met {len(df)} bars")
 
-    def run(self, strategy_class: Any, strategy_params: Dict[str, Any] = None) -> Dict[
-        str, Any]:
+    def run(
+        self, strategy_class: Any, strategy_params: Dict[str, Any] = None
+    ) -> Dict[str, Any]:
         """
         Voer backtest uit.
 
@@ -89,13 +91,15 @@ class SophyBacktester:
 
         # Voer backtest uit
         self.logger.log_info(
-            f"Backtest starten met strategie: {strategy_class.__name__}")
+            f"Backtest starten met strategie: {strategy_class.__name__}"
+        )
         results = self.cerebro.run()
 
         # Verwerk resultaten
         if not results:
-            self.logger.log_info("Backtest resulteerde in geen strategie instanties",
-                                 level="ERROR")
+            self.logger.log_info(
+                "Backtest resulteerde in geen strategie instanties", level="ERROR"
+            )
             return {"success": False, "message": "Geen resultaten"}
 
         # Verwerk analyses
@@ -103,20 +107,20 @@ class SophyBacktester:
 
         # Sharpe ratio
         sharpe = strategy.analyzers.sharpe.get_analysis()
-        sharpe_ratio = sharpe.get('sharperatio', 0.0)
+        sharpe_ratio = sharpe.get("sharperatio", 0.0)
 
         # Drawdown
         dd = strategy.analyzers.drawdown.get_analysis()
-        max_drawdown = dd.get('max', {}).get('drawdown', 0.0)
+        max_drawdown = dd.get("max", {}).get("drawdown", 0.0)
 
         # Trades
         trades_analysis = strategy.analyzers.trades.get_analysis()
-        total_trades = trades_analysis.get('total', 0)
-        won_trades = trades_analysis.get('won', {}).get('total', 0)
+        total_trades = trades_analysis.get("total", 0)
+        won_trades = trades_analysis.get("won", {}).get("total", 0)
 
         # Bereken rendement
         final_value = self.cerebro.broker.getvalue()
-        initial_value = self.config.get('initial_balance', 100000)
+        initial_value = self.config.get("initial_balance", 100000)
         profit_loss = final_value - initial_value
         return_pct = (final_value / initial_value - 1) * 100
 
@@ -131,11 +135,12 @@ class SophyBacktester:
             "sharpe_ratio": sharpe_ratio,
             "total_trades": total_trades,
             "won_trades": won_trades,
-            "win_rate": (won_trades / total_trades * 100) if total_trades > 0 else 0.0
+            "win_rate": (won_trades / total_trades * 100) if total_trades > 0 else 0.0,
         }
 
         self.logger.log_info(
-            f"Backtest voltooid: {return_pct:.2f}% rendement, {total_trades} trades")
+            f"Backtest voltooid: {return_pct:.2f}% rendement, {total_trades} trades"
+        )
         return result
 
     def plot(self, filename: Optional[str] = None) -> None:
@@ -151,8 +156,9 @@ class SophyBacktester:
                 os.makedirs(os.path.dirname(filename), exist_ok=True)
 
             # Genereer plot
-            figs = self.cerebro.plot(style='candle', barup='green', bardown='red',
-                                     grid=True, volume=False)
+            figs = self.cerebro.plot(
+                style="candle", barup="green", bardown="red", grid=True, volume=False
+            )
 
             # Sla op indien filename gegeven
             if filename and figs and len(figs) > 0 and len(figs[0]) > 0:
@@ -171,7 +177,7 @@ def run_backtest(
     config: Optional[Dict[str, Any]] = None,
     logger: Optional[Any] = None,
     plot: bool = True,
-    plot_filename: Optional[str] = None
+    plot_filename: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Eenvoudige functie om een backtest uit te voeren.
@@ -206,8 +212,9 @@ def run_backtest(
     if isinstance(data, pd.DataFrame):
         if symbol is None:
             symbol = "UNKNOWN"
-            logger.log_info("Geen symbool gespecificeerd voor DataFrame",
-                            level="WARNING")
+            logger.log_info(
+                "Geen symbool gespecificeerd voor DataFrame", level="WARNING"
+            )
         backtester.add_data(data, symbol)
     else:
         for sym, df in data.items():

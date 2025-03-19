@@ -9,16 +9,17 @@ def test_backtrader():
     """Test de Backtrader integratie met de Turtle strategie"""
     # Configuratie laden
     import os
+
     config_path = os.path.join(os.path.dirname(__file__), "config", "settings.json")
     config = load_config(config_path)
 
     # Logger aanmaken
-    os.makedirs('logs', exist_ok=True)
+    os.makedirs("logs", exist_ok=True)
     logger = Logger("logs/backtrader_test.log")
     logger.log_info("Start Backtrader test")
 
     # Maak een directory voor testdata
-    os.makedirs('data', exist_ok=True)
+    os.makedirs("data", exist_ok=True)
 
     try:
         # Import backtrader component
@@ -28,11 +29,14 @@ def test_backtrader():
         manager = BacktestingManager(config, logger)
 
         # Voer een eenvoudige backtest uit
-        results = manager.run_backtest(strategy_name="turtle", symbols=["EURUSD"],
-                                       start_date=(datetime.now() - timedelta(
-                                           days=365)).strftime("%Y-%m-%d"),
-                                       end_date=datetime.now().strftime("%Y-%m-%d"),
-                                       timeframe="D1", plot_results=True)
+        results = manager.run_backtest(
+            strategy_name="turtle",
+            symbols=["EURUSD"],
+            start_date=(datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d"),
+            end_date=datetime.now().strftime("%Y-%m-%d"),
+            timeframe="D1",
+            plot_results=True,
+        )
 
         # Print resultaten
         print("\nBacktest Results:")
@@ -46,6 +50,7 @@ def test_backtrader():
     except Exception as e:
         logger.log_info(f"Error in Backtrader test: {str(e)}", level="ERROR")
         import traceback
+
         traceback.print_exc()
         return False
 

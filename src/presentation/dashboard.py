@@ -982,10 +982,11 @@ class TradingDashboard:
                             "stop_loss": matching_trade["stop_loss"],
                             "take_profit": matching_trade["take_profit"],
                             "duration": (
-                                pd.to_datetime(timestamp)
-                                - pd.to_datetime(matching_trade["entry_time"])
-                            ).total_seconds()
-                            / 3600,  # in hours
+                                            pd.to_datetime(timestamp)
+                                            - pd.to_datetime(
+                                            matching_trade["entry_time"])
+                                        ).total_seconds()
+                                        / 3600,  # in hours
                         }
 
                         trades.append(trade)
@@ -1235,8 +1236,9 @@ class TradingDashboard:
                     ):
                         # Calculate new average price
                         pos["avg_price"] = (
-                            pos["avg_price"] * abs(pos["net_volume"]) + price * volume
-                        ) / (abs(pos["net_volume"]) + volume)
+                                               pos["avg_price"] * abs(
+                                               pos["net_volume"]) + price * volume
+                                           ) / (abs(pos["net_volume"]) + volume)
                         pos["net_volume"] = new_volume
                     # If flipping position
                     elif new_volume != 0:
@@ -1347,7 +1349,7 @@ class TradingDashboard:
                 x=[timestamps[0], timestamps[-1]],
                 y=[profit_target, profit_target],
                 mode="lines",
-                name=f"{self.ftmo_config['profit_target']*100}% Profit Target",
+                name=f"{self.ftmo_config['profit_target'] * 100}% Profit Target",
                 line=dict(color="green", width=1, dash="dot"),
             )
         )
@@ -1359,7 +1361,7 @@ class TradingDashboard:
                 x=[timestamps[0], timestamps[-1]],
                 y=[max_loss, max_loss],
                 mode="lines",
-                name=f"{self.ftmo_config['total_drawdown_limit']*100}% Max Loss",
+                name=f"{self.ftmo_config['total_drawdown_limit'] * 100}% Max Loss",
                 line=dict(color="red", width=1, dash="dot"),
             )
         )
@@ -1424,7 +1426,7 @@ class TradingDashboard:
                 x=[timestamps[0], timestamps[-1]],
                 y=[daily_limit, daily_limit],
                 mode="lines",
-                name=f"{self.ftmo_config['daily_drawdown_limit']*100}% Daily Limit",
+                name=f"{self.ftmo_config['daily_drawdown_limit'] * 100}% Daily Limit",
                 line=dict(color="orange", width=1, dash="dot"),
             )
         )
@@ -1436,7 +1438,7 @@ class TradingDashboard:
                 x=[timestamps[0], timestamps[-1]],
                 y=[total_limit, total_limit],
                 mode="lines",
-                name=f"{self.ftmo_config['total_drawdown_limit']*100}% Total Limit",
+                name=f"{self.ftmo_config['total_drawdown_limit'] * 100}% Total Limit",
                 line=dict(color="red", width=1, dash="dot"),
             )
         )
